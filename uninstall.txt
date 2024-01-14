@@ -1,0 +1,30 @@
+certifi==2023.11.17
+charset-normalizer==3.3.2
+contourpy==1.2.0
+cycler==0.12.1
+fonttools==4.47.2
+idna==3.6
+kiwisolver==1.4.5
+lxml==5.1.0
+matplotlib==3.8.2
+mplfinance==0.12.10b0
+numpy==1.26.3
+omspy @ git+https://github.com/pannet1/omspy@03eb6a29de8385d326e80f94613cb017143d1430
+omspy-brokers @ git+https://github.com/pannet1/omspy-brokers@c4abee8fb3de1316321ccd7785b285acf156e542
+packaging==23.2
+pandas==2.1.4
+pandas-datareader==0.10.0
+pendulum==3.0.0
+pillow==10.2.0
+pydantic==1.10.13
+pyotp==2.9.0
+pyparsing==3.1.1
+python-dateutil==2.8.2
+pytz==2023.3.post1
+requests==2.31.0
+six==1.16.0
+time-machine==2.13.0
+toolkit @ git+https://github.com/pannet1/toolkit@fccb5b1f829d1c5765acecf93de90b771c03a492
+typing_extensions==4.9.0
+tzdata==2023.4
+urllib3==2.1.0
