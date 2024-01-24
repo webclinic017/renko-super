@@ -6,3 +6,5 @@ pyotp
 pendulum
 PyQt5
 renkodf
+pyarrow
+xlrd
