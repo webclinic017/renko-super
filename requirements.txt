@@ -8,3 +8,5 @@ PyQt5
 renkodf
 pyarrow
 xlrd
+streaming-indicators
+termcolor
