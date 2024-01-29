@@ -10,3 +10,4 @@ pyarrow
 xlrd
 streaming-indicators
 termcolor
+pendulum
