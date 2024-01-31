@@ -126,7 +126,7 @@ while not any(quotes):
     UTLS.slp_til_nxt_sec()
 
 # df_ticks = get_historical_data()
-df_ticks = pd.read_csv(f"./{SYMBOL.replace(' ', '_')}.csv")
+df_ticks = pd.read_csv(f"{DATA}{SYMBOL.replace(' ', '_')}.csv")
 
 r = RenkoWS(
     df_ticks['timestamp'].iat[0],
