@@ -6,10 +6,11 @@ import streaming_indicators as si
 import mplfinance as mpf
 from matplotlib import animation
 from datetime import datetime as dt
+import pendulum
 import pandas as pd
 import numpy as np
 
-SYMBOL = "NIFTY BANK"
+SYMBOL = "NIFTY 50"
 
 
 def get_brkr_and_wserver():
@@ -127,6 +128,7 @@ while not any(quotes):
 
 # df_ticks = get_historical_data()
 df_ticks = pd.read_csv(f"./{SYMBOL.replace(' ', '_')}.csv")
+print(df_ticks.head())
 
 r = RenkoWS(
     df_ticks['timestamp'].iat[0],
