@@ -44,7 +44,12 @@ def color(st: pd.DataFrame) -> pd.DataFrame:
     return st
 
 
+i = 0
+
+
 def animate(ival):
+    global i
+    i += 1
     # sanity checks
     if (0 + ival) >= len(df_ticks):
         print('no more data to plot')
@@ -53,20 +58,21 @@ def animate(ival):
             exit()
         return
 
-    # get streaming data from broker wsocket
-    quotes = wserver.ltp
-    dct = [{
-        "timestamp": dt.now().timestamp(),
-        "Symbol": SYMBOL,
-        "close": quotes[SYMBOL]}
-        for SYMBOL in quotes.keys()][0]
+    if i == len(df_ticks):
+        # get streaming data from broker wsocket
+        quotes = wserver.ltp
+        dct = [{
+            "timestamp": dt.now().timestamp(),
+            "Symbol": SYMBOL,
+            "close": quotes[SYMBOL]}
+            for SYMBOL in quotes.keys()][0]
 
-    # update only when you have data
-    if any(dct):
-        df_ticks.loc[len(df_ticks)] = dct
-        timestamp = df_ticks['timestamp'].iat[(0 + ival)]
-        price = df_ticks['close'].iat[(0 + ival)]
-        r.add_prices(timestamp, price)
+        # update only when you have data
+        if any(dct):
+            df_ticks.loc[len(df_ticks)] = dct
+            timestamp = df_ticks['timestamp'].iat[(0 + ival)]
+            price = df_ticks['close'].iat[(0 + ival)]
+            r.add_prices(timestamp, price)
 
     # get renko dataframe
     df_normal = r.renko_animate('normal', max_len=26, keep=25)

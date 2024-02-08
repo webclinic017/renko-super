@@ -9,4 +9,4 @@ FUTL = Fileutils()
 SETG = FUTL.get_lst_fm_yml(DIRP + "renko_super.yml")
 BRKR = SETG["finvasia"]
 SUPR = SETG["supertrend"]
-UTLS = Utilities()
+UTIL = Utilities()

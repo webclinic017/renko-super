@@ -53,6 +53,7 @@ def animate(ival):
             exit()
         return
 
+    """
     # get streaming data from broker wsocket
     quotes = wserver.ltp
     dct = [{
@@ -64,9 +65,11 @@ def animate(ival):
     # update only when you have data
     if any(dct):
         df_ticks.loc[len(df_ticks)] = dct
-        timestamp = df_ticks['timestamp'].iat[(0 + ival)]
-        price = df_ticks['close'].iat[(0 + ival)]
-        r.add_prices(timestamp, price)
+
+    """
+    timestamp = df_ticks['timestamp'].iat[(0 + ival)]
+    price = df_ticks['close'].iat[(0 + ival)]
+    r.add_prices(timestamp, price)
 
     # get renko dataframe
     df_normal = r.renko_animate('normal', max_len=26, keep=25)
@@ -97,15 +100,8 @@ def animate(ival):
         ax=ax1,
         volume=ax2,
         axtitle=SYMBOL)
+### ======== end of plot ========== ###
 
-
-# check if you are getting data from sockets
-brkr, wserver = get_brkr_and_wserver()
-quotes = {}
-while not any(quotes):
-    # dataframe from dictionary
-    quotes = wserver.ltp
-    UTLS.slp_til_nxt_sec()
 
 df_ticks = pd.read_csv(f"{DATA}{SYMBOL.replace(' ', '_')}.csv")
 print(df_ticks.head())
@@ -117,16 +113,16 @@ r = RenkoWS(
 )
 initial_df = r.initial_df
 # init plot
-fig, axes = mpf.plot(initial_df, volume=True,
-                     title='\n' + SYMBOL,
-                     type='candle', style='charles')
+fig, axes = mpf.plot(initial_df, returnfig=True, volume=True,
+                     figsize=(11, 8), panel_ratios=(2, 1),
+                     title='\n' + SYMBOL, type='candle', style='charles')
 ax1 = axes[0]
 ax2 = axes[2]
-mpf.plot(initial_df, ax=ax1, volume=ax2)
+mpf.plot(initial_df, type='candle', ax=ax1,
+         volume=ax2, axtitle='renko: normal')
 # init super trend streaming indicator
 ST = si.SuperTrend(SUPR['atr'], SUPR['multiplier'])
 
 ani = animation.FuncAnimation(
     fig, animate, interval=80, save_count=100)
-print(ani)
 mpf.show()
