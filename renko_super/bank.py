@@ -1,4 +1,4 @@
-from constants import logging, BRKR, DATA, SETG, SUPR, UTLS
+from constants import logging, BRKR, DATA, SETG, SUPR, UTIL
 from wserver import Wserver
 from omspy_brokers.finvasia import Finvasia
 from renkodf import RenkoWS
@@ -8,10 +8,13 @@ from matplotlib import animation
 from datetime import datetime as dt
 import pandas as pd
 import numpy as np
+import traceback
+import os
+from tabulate import tabulate
 
 SYMBOL = "NIFTY BANK"
 
-
+signal_details_file = "signal_details.csv"
 def get_brkr_and_wserver():
     if any(BRKR):
         brkr = Finvasia(**BRKR)
@@ -43,8 +46,9 @@ def get_historical_data():
     # get timestamp and price for init RenkoWs
     return df_ticks
 
-
+transaction = None
 def color(st: pd.DataFrame) -> pd.DataFrame:
+    global transaction
     UP = []
     DN = []
     for i in range(len(st)):
@@ -59,6 +63,41 @@ def color(st: pd.DataFrame) -> pd.DataFrame:
             DN.append(np.nan)
     st['up'] = UP
     st['dn'] = DN
+    try:
+        if len(st) > 0:
+            headers = st.columns.to_list() + ["BuySignal", "timestamp"]
+            prev_close = st.iloc[-2]["close"]
+            _st = st.iloc[-1]["st"]
+            if _st < prev_close and transaction != "BUY":
+                
+                transaction = "BUY"
+                dets = pd.DataFrame([st.iloc[-1]])
+                dets["BuySignal"] = 1
+                dets["timestamp"] = dt.now()
+               
+                # print(dets)
+                if os.path.exists(signal_details_file):
+                    dets.to_csv(signal_details_file, mode="a", header=None, index=False)
+                else:
+                    dets.to_csv(signal_details_file, mode="w", header=headers ,index=False)
+                print(tabulate(dets.tail(2), headers='keys', tablefmt='psql'))
+
+                # trigger buy order
+            elif _st > prev_close and transaction != "SELL":
+                
+                transaction = "SELL"
+                dets = pd.DataFrame([st.iloc[-1]])
+                dets["BuySignal"] = -1
+                dets["timestamp"] = dt.now()
+               
+                if os.path.exists(signal_details_file):
+                    dets.to_csv(signal_details_file, mode="a", header=None, index=False)
+                else:
+                    dets.to_csv(signal_details_file, mode="w",header=headers, index=False)
+                print(tabulate(dets.tail(2), headers='keys', tablefmt='psql'))
+                # trigger sell order
+    except:
+        traceback.print_exc()
     return st
 
 
@@ -98,7 +137,7 @@ def animate(ival):
     # get direction and color of supertrend
     df_normal = color(df_normal)
     # drop unwanted columns
-    df_normal.drop(columns=['dir', 'st'], inplace=True)
+    # df_normal.drop(columns=['dir', 'st'], inplace=True)
 
     # clear everytime
     ax1.clear()
@@ -123,7 +162,7 @@ quotes = {}
 while not any(quotes):
     # dataframe from dictionary
     quotes = wserver.ltp
-    UTLS.slp_til_nxt_sec()
+    UTIL.slp_til_nxt_sec()
 
 # df_ticks = get_historical_data()
 df_ticks = pd.read_csv(f"{DATA}{SYMBOL.replace(' ', '_')}.csv")
