@@ -15,6 +15,8 @@ from tabulate import tabulate
 SYMBOL = "NIFTY BANK"
 
 signal_details_file = "signal_details.csv"
+
+
 def get_brkr_and_wserver():
     if any(BRKR):
         brkr = Finvasia(**BRKR)
@@ -46,16 +48,19 @@ def get_historical_data():
     # get timestamp and price for init RenkoWs
     return df_ticks
 
-transaction = None
+
+tx = None
+
+
 def color(st: pd.DataFrame) -> pd.DataFrame:
-    global transaction
+    global tx
     UP = []
     DN = []
     for i in range(len(st)):
-        if st['dir'].iloc[i] == 1:
+        if st['st_dir'].iloc[i] == 1:
             UP.append(st['st'].iloc[i])
             DN.append(np.nan)
-        elif st['dir'].iloc[i] == -1:
+        elif st['st_dir'].iloc[i] == -1:
             DN.append(st['st'].iloc[i])
             UP.append(np.nan)
         else:
@@ -65,38 +70,44 @@ def color(st: pd.DataFrame) -> pd.DataFrame:
     st['dn'] = DN
     try:
         if len(st) > 0:
-            headers = st.columns.to_list() + ["BuySignal", "timestamp"]
-            prev_close = st.iloc[-2]["close"]
-            _st = st.iloc[-1]["st"]
-            if _st < prev_close and transaction != "BUY":
-                
-                transaction = "BUY"
-                dets = pd.DataFrame([st.iloc[-1]])
-                dets["BuySignal"] = 1
-                dets["timestamp"] = dt.now()
-               
+            headers = st.columns.to_list() + ["timestamp", "tx"]
+            curr_close = st.iloc[-1]["close"]
+            prev_st = st.iloc[-2]["st"]
+            print(f"supertrend {prev_st} curr_close {curr_close}")
+            # dets = pd.DataFrame([st.iloc[-1]])
+            dets = st.iloc[-1:].copy()
+            # overwrite st column
+            dets["st"] = prev_st
+            # append new column
+            dets["timestamp"] = dt.now()
+            dets.set_index("timestamp", inplace=True)
+            dets.drop(columns=["open", "high", "low",
+                      "up", "dn", "volume"], inplace=True)
+            if curr_close > prev_st and tx != "CE":
+                tx = "CE"
                 # print(dets)
                 if os.path.exists(signal_details_file):
-                    dets.to_csv(signal_details_file, mode="a", header=None, index=False)
+                    dets.to_csv(signal_details_file, mode="a",
+                                header=None, index=False)
                 else:
-                    dets.to_csv(signal_details_file, mode="w", header=headers ,index=False)
-                print(tabulate(dets.tail(2), headers='keys', tablefmt='psql'))
-
+                    dets.to_csv(signal_details_file, mode="w",
+                                header=headers, index=False)
                 # trigger buy order
-            elif _st > prev_close and transaction != "SELL":
-                
-                transaction = "SELL"
-                dets = pd.DataFrame([st.iloc[-1]])
-                dets["BuySignal"] = -1
-                dets["timestamp"] = dt.now()
-               
+            elif prev_st > curr_close and tx != "PE":
+                tx = "PE"
                 if os.path.exists(signal_details_file):
-                    dets.to_csv(signal_details_file, mode="a", header=None, index=False)
+                    dets.to_csv(signal_details_file, mode="a",
+                                header=None, index=False)
                 else:
-                    dets.to_csv(signal_details_file, mode="w",header=headers, index=False)
-                print(tabulate(dets.tail(2), headers='keys', tablefmt='psql'))
+                    dets.to_csv(signal_details_file, mode="w",
+                                header=headers, index=False)
+            else:
+                dets["tx"] = tx
                 # trigger sell order
-    except:
+            print(tabulate(st.tail(5), headers='keys', tablefmt='psql'))
+            print(tabulate(dets.tail(), headers='keys', tablefmt='psql'))
+    except Exception as e:
+        print(e)
         traceback.print_exc()
     return st
 
@@ -128,16 +139,14 @@ def animate(ival):
     # get renko dataframe
     df_normal = r.renko_animate('normal', max_len=26, keep=25)
     for key, candle in df_normal.iterrows():
-        dir, st = ST.update(candle)
+        st_dir, st = ST.update(candle)
         # add the st value to respective row
         # in the dataframe
         df_normal.loc[key, 'st'] = st
-        df_normal.loc[key, 'dir'] = dir
+        df_normal.loc[key, 'st_dir'] = st_dir
 
     # get direction and color of supertrend
     df_normal = color(df_normal)
-    # drop unwanted columns
-    # df_normal.drop(columns=['dir', 'st'], inplace=True)
 
     # clear everytime
     ax1.clear()

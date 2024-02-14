@@ -55,7 +55,6 @@ class Wserver:
         if val:
             exch_tkn = message["e"] + "|" + message["tk"]
             self.ltp[self.dct_tokens[exch_tkn]] = float(val)
-            print(self.ltp)
 
 
 if __name__ == "__main__":
