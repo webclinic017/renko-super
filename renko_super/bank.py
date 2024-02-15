@@ -49,11 +49,11 @@ def get_historical_data():
     return df_ticks
 
 
-tx = None
+signal = ""
 
 
 def color(st: pd.DataFrame) -> pd.DataFrame:
-    global tx
+    global signal
     UP = []
     DN = []
     for i in range(len(st)):
@@ -70,11 +70,9 @@ def color(st: pd.DataFrame) -> pd.DataFrame:
     st['dn'] = DN
     try:
         if len(st) > 0:
-            headers = st.columns.to_list() + ["timestamp", "tx"]
+            headers = st.columns.to_list() + ["timestamp", "signal"]
             curr_close = st.iloc[-1]["close"]
             prev_st = st.iloc[-2]["st"]
-            print(f"supertrend {prev_st} curr_close {curr_close}")
-            # dets = pd.DataFrame([st.iloc[-1]])
             dets = st.iloc[-1:].copy()
             # overwrite st column
             dets["st"] = prev_st
@@ -82,9 +80,9 @@ def color(st: pd.DataFrame) -> pd.DataFrame:
             dets["timestamp"] = dt.now()
             dets.set_index("timestamp", inplace=True)
             dets.drop(columns=["open", "high", "low",
-                      "up", "dn", "volume"], inplace=True)
-            if curr_close > prev_st and tx != "CE":
-                tx = "CE"
+                      "up", "dn"], inplace=True)
+            if curr_close > prev_st and signal != "buy":
+                signal = "buy"
                 # print(dets)
                 if os.path.exists(signal_details_file):
                     dets.to_csv(signal_details_file, mode="a",
@@ -93,8 +91,8 @@ def color(st: pd.DataFrame) -> pd.DataFrame:
                     dets.to_csv(signal_details_file, mode="w",
                                 header=headers, index=False)
                 # trigger buy order
-            elif prev_st > curr_close and tx != "PE":
-                tx = "PE"
+            elif prev_st > curr_close and signal != "sell":
+                signal = "sell"
                 if os.path.exists(signal_details_file):
                     dets.to_csv(signal_details_file, mode="a",
                                 header=None, index=False)
@@ -102,7 +100,7 @@ def color(st: pd.DataFrame) -> pd.DataFrame:
                     dets.to_csv(signal_details_file, mode="w",
                                 header=headers, index=False)
             else:
-                dets["tx"] = tx
+                dets["signal"] = signal
                 # trigger sell order
             print(tabulate(st.tail(5), headers='keys', tablefmt='psql'))
             print(tabulate(dets.tail(), headers='keys', tablefmt='psql'))
