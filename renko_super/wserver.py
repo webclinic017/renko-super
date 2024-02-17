@@ -59,45 +59,27 @@ class Wserver:
 
 if __name__ == "__main__":
     from omspy_brokers.finvasia import Finvasia
-    from constants import base, logging, common, cnfg, data, fils
-    from symbols import Symbols
-    from paper import Paper
+    from constants import logging, BRKR, SETG
     from time import sleep
-    import sys
+    import pandas as pd
 
     slp = 2
-    SYMBOL = common["base"]
+    SYMBOL = "BANKNIFTY"
 
-    obj_sym = Symbols(base['EXCHANGE'], SYMBOL, base["EXPIRY"])
-    obj_sym.get_exchange_token_map_finvasia()
-
-    def get_brkr_and_wserver():
-        if common["live"]:
-            brkr = Finvasia(**cnfg)
-            if not brkr.authenticate():
-                logging.error("Failed to authenticate")
-                sys.exit(0)
-            else:
-                dct_tokens = obj_sym.get_tokens(PAPER_ATM)
-                lst_tokens = list(dct_tokens.keys())
-                wserver = Wserver(brkr, lst_tokens, dct_tokens)
-        else:
-            dct_tokens = obj_sym.get_tokens(PAPER_ATM)
-            lst_tokens = list(dct_tokens.keys())
-            brkr = Paper(lst_tokens, dct_tokens)
-            wserver = brkr
-        return brkr, wserver
-
-    if common["live"]:
-        broker = Finvasia(**cnfg)
-        if not broker.authenticate():
+    def get_api_and_wserver():
+        api = Finvasia(**BRKR)
+        if not api.authenticate():
             logging.error("Failed to authenticate")
-            sys.exit(0)
-    wserver = Wserver(
-        broker,
-        ["NSE|26000", "NFO|43156"],
-        {"NSE|26000": "NIFTY 50", "NFO|43156": "DUMMY"},
-    )
+            __import__("sys").exit(0)
+        else:
+            dct_tokens = {SETG[SYMBOL]['key']: SYMBOL}
+            lst_tokens = list(dct_tokens.keys())
+            wserver = Wserver(api, lst_tokens, dct_tokens)
+        return api, wserver
+
+    brkr, wserver = get_api_and_wserver()
+    print(pd.DataFrame(brkr.orders))
+    print(pd.DataFrame(brkr.positions))
     while True:
         print(wserver.ltp)
-        time.sleep(1)
+        sleep(1)
