@@ -25,7 +25,7 @@ class Symbols:
         self.exch = exch
         self.symbol = symbol
         self.expiry = expiry
-        self.csvfile = f"./{self.symbol}_map.csv"
+        self.csvfile = f"./map_{self.symbol.lower()}.csv"
 
     def get_exchange_token_map_finvasia(self):
         if FUTL.is_file_not_2day(self.csvfile):

@@ -9,7 +9,6 @@ def get_symbols():
     keys_in_settings = list(SETG.keys())
     symbol_keys = [
         key for key in keys_in_settings if key not in ignore_keys_in_settings]
-# get the value of SETG[key]["nse"]
     symbols = {key: SETG[key]["nse"] for key in symbol_keys}
     return symbols
 
@@ -55,7 +54,7 @@ def main():
         rounded_minute_diff = 15 * (minute_diff // 15)
         df['rounded_timestamp'] = start_time + \
             pd.to_timedelta(rounded_minute_diff, unit='m')
-
+        print(df.head)
         # Filter the DataFrame to select the first occurrence of each rounded interval
         filtered_df = df[
             df['rounded_timestamp'] >= start_time

@@ -12,34 +12,22 @@ import numpy as np
 import traceback
 import re
 from rich import print
+from typing import Dict
 
 try:
     SYMBOL = __import__("os").path.basename(__file__).split(".")[0].upper()
     EXPIRY = SETG[SYMBOL]['expiry']
-    DATA += SYMBOL + "/"
-    F_HIST = DATA + "/history.csv"
-    F_POS = DATA + "/position.json"
-    F_SIGN = DATA + "/signals.csv"
 except Exception as e:
     logging.debug(f"{e} while getting constants")
     __import__("sys").exit(1)
 
-
-def read_positions_fm_file():
-    dct_pos = dict(
-        symbol="",
-        quantity=0,
-        entry_price=0,
-        urmtom=0,
-        rpnl=0,
-    )
-    if FUTL.is_file_exists(F_POS):
-        dct_pos = FUTL.json_fm_file(F_POS)
-    return dct_pos
+DATA += SYMBOL
+F_HIST = DATA + "/history.csv"
+F_POS = DATA + "/position.json"
+F_SIGN = DATA + "/signals.csv"
 
 
 def call_or_put_pos() -> str:
-    # TODO update rpnl from quote
     print(pd.DataFrame(dct_pos, index=[0]))
     pos = ""
     try:
@@ -93,7 +81,17 @@ def _cls_pos_get_qty():
         return qty_fm_stg
 
 
-def _enter(symbol: str, quantity: int):
+def _write_signal_to_file(dets):
+    headers = dets.columns.tolist()
+    if FUTL.is_file_exists(F_SIGN):
+        dets.to_csv(F_SIGN, mode="a",
+                    header=None, index=False)
+    else:
+        dets.to_csv(F_SIGN, mode="w",
+                    header=headers, index=False)
+
+
+def _enter_and_write(symbol: str, quantity: int):
     args = dict(
         symbol=symbol,
         quantity=quantity,
@@ -106,54 +104,44 @@ def _enter(symbol: str, quantity: int):
     )
     logging.info(f"trying to enter position {args}")
     resp = api.order_place(**args)
+    FUTL.write_file(F_POS, args)
     print(resp)
 
 
-def _write_signal_to_file(dets):
-    headers = dets.columns.tolist()
-    if FUTL.is_file_exists(F_SIGN):
-        dets.to_csv(F_SIGN, mode="a",
-                    header=None, index=False)
+def _get_itm_option(close_price, opt):
+    atm = obj_sym.get_atm(close_price)
+    if opt == "C":
+        return SYMBOL + EXPIRY + opt + str(atm - SETG[SYMBOL]['itm'])
     else:
-        dets.to_csv(F_SIGN, mode="w",
-                    header=headers, index=False)
-
-
-def _get_itm_option(opt):
-    if opt == "itm":
-        return SETG[SYMBOL]['itm']
-    elif opt == "otm":
-        return SETG[SYMBOL]['otm']
-    else:
-        raise Exception(f"Invalid option {opt}")
+        return SYMBOL + EXPIRY + "P" + str(atm + SETG[SYMBOL]['itm'])
 
 
 def do(dets, opt: str):
-    quantity = _cls_pos_get_qty()
-    itm_option = _get_itm_option(opt)
-    _enter(itm_option, quantity)
+    itm_option = _get_itm_option(
+        dets.iloc[-1]["close"],
+        opt)
+    _enter_and_write(
+        itm_option,
+        _cls_pos_get_qty()
+    )
     _write_signal_to_file(dets)
 
 
-def get_api_and_wserver(obj_sym):
-    obj_sym.get_exchange_token_map_finvasia()
-    api = Finvasia(**BRKR)
-    if not api.authenticate():
-        logging.error("Failed to authenticate")
-        __import__("sys").exit(0)
-    else:
-        exch_tkn = (SETG[SYMBOL]['key']).split("|")
+def get_ltp_of_underlying(api):
+    quote = 0
+    try:
         resp = api.finvasia.get_quotes(
-            exch_tkn[0], exch_tkn[1])
-        print("quote", resp)
-        UTIL.slp_for(2)
-        atm = obj_sym.get_atm(int(float(resp["lp"])))
-        dct_tokens = obj_sym.get_tokens(atm)
-        print(dct_tokens)
-        lst_tokens = list(dct_tokens.keys())
-        print(lst_tokens)
-        wserver = Wserver(api, lst_tokens, dct_tokens)
-    return api, wserver
+            SETG[SYMBOL]['key'].split("|")[0],
+            SETG[SYMBOL]['key'].split("|")[1]
+        )
+        if resp is None:
+            raise Exception("No response")
+        quote = float(resp["lp"])
+        UTIL.slp_til_nxt_sec()
+    except Exception as e:
+        logging.debug(f"{e} while getting ltp")
+    finally:
+        return quote
 
 
 def split_colors(st: pd.DataFrame) -> pd.DataFrame:
@@ -193,96 +181,130 @@ def split_colors(st: pd.DataFrame) -> pd.DataFrame:
     return st
 
 
-def animate(ival):
-    # sanity checks
-    if (0 + ival) >= len(df_ticks):
-        print('no more data to plot')
-        ani.event_source.interval *= 3
-        if ani.event_source.interval > 12000:
-            exit()
-        return
-
-    # get streaming data from broker wsocket
-    quotes = wserver.ltp
-    dct = [{
-        "timestamp": dt.now().timestamp(),
-        "Symbol": SYMBOL,
-        "close": quotes[SYMBOL]}
-        for SYMBOL in quotes.keys()][0]
-
-    # update only when you have data
-    if any(dct):
-        df_ticks.loc[len(df_ticks)] = dct
-        timestamp = df_ticks['timestamp'].iat[(0 + ival)]
-        price = df_ticks['close'].iat[(0 + ival)]
-        r.add_prices(timestamp, price)
-
-    # get renko dataframe
-    df_normal = r.renko_animate('normal', max_len=26, keep=25)
-    for key, candle in df_normal.iterrows():
-        st_dir, st = ST.update(candle)
-        # add the st value to respective row
-        # in the dataframe
-        df_normal.loc[key, 'st'] = st
-        df_normal.loc[key, 'st_dir'] = st_dir
-
-        # get direction and split colors of supertrend
-    df_normal = split_colors(df_normal)
-
-    # clear everytime
-    ax1.clear()
-    ax2.clear()
-    ic = [
-        # Supertrend
-        mpf.make_addplot(df_normal[['up']], color='green', ax=ax1,),
-        mpf.make_addplot(df_normal[['dn']], color='#FF8849', ax=ax1,),
-    ]
-    mpf.plot(
-        df_normal,
-        type='candle',
-        addplot=ic,
-        ax=ax1,
-        volume=ax2,
-        axtitle=SYMBOL)
+def read_positions_fm_file() -> Dict:
+    """
+        read overnight positions from file
+        inputs: None
+        outputs: position
+    """
+    dct_pos = dict(
+        symbol="",
+        quantity=0,
+        entry_price=0,
+        urmtom=0,
+        rpnl=0,
+    )
+    if FUTL.is_file_exists(F_POS):
+        dct_pos = FUTL.read_file(F_POS)
+    return dct_pos
 
 
-"""
-    main program starts here
-"""
-# check if you are getting data from sockets
-#
-
-obj_sym = Symbols("NFO", SYMBOL, EXPIRY)
-api, wserver = get_api_and_wserver(obj_sym)
-quotes = {}
-while not any(quotes):
-    # dataframe from dictionary
-    quotes = wserver.ltp
+def get_api_and_wserver(obj_sym):
+    obj_sym.get_exchange_token_map_finvasia()
+    brkr = Finvasia(**BRKR)
+    if not brkr.authenticate():
+        logging.error("Failed to authenticate")
+        __import__("sys").exit(0)
+    else:
+        quote = get_ltp_of_underlying(brkr)
+        if quote > 0:
+            atm = obj_sym.get_atm(quote)
+            dct_tokens = obj_sym.get_tokens(atm)
+            print(dct_tokens)
+            lst_tokens = list(dct_tokens.keys())
+            print(lst_tokens)
+            wserver = Wserver(brkr, lst_tokens, dct_tokens)
+        else:
+            logging.error("Failed to get quote")
+            __import__("sys").exit(0)
+    quotes = {}
+    while not any(quotes):
+        # dataframe from dictionary
+        quotes = wserver.ltp
+        UTIL.slp_til_nxt_sec()
     print(quotes)
-    UTIL.slp_til_nxt_sec()
+    return brkr, wserver
+
+
+def get_api():
+    brkr = Finvasia(**BRKR)
+    if not brkr.authenticate():
+        logging.error("Failed to authenticate")
+        __import__("sys").exit(0)
+    else:
+        return brkr
+
 
 dct_pos = read_positions_fm_file()
-df_ticks = pd.read_csv(F_HIST)
-
-r = RenkoWS(
-    df_ticks['timestamp'].iat[0],
-    df_ticks['close'].iat[0],
-    brick_size=SETG[SYMBOL]['brick']
+obj_sym = Symbols("NFO", SYMBOL, EXPIRY)
+api = get_api()
 
 
-)
-initial_df = r.initial_df
-# init plot
-fig, axes = mpf.plot(initial_df, returnfig=True, volume=True,
-                     figsize=(11, 8), panel_ratios=(2, 1),
-                     type='candle', style='charles')
-ax1 = axes[0]
-ax2 = axes[2]
-mpf.plot(initial_df, type='candle', ax=ax1,
-         volume=ax2, axtitle='renko: normal')
-# init super trend streaming indicator
-ST = si.SuperTrend(SUPR['atr'], SUPR['multiplier'])
+def main():
 
-ani = animation.FuncAnimation(
-    fig, animate, interval=80, save_count=100)
-mpf.show()
+    def animate(ival):
+        if (0 + ival) >= len(df_ticks):
+            logging.error('no more data to plot')
+            ani.event_source.interval *= 3
+            if ani.event_source.interval > 12000:
+                exit()
+            return
+
+        ulying = get_ltp_of_underlying(api)
+        if ulying == 0:
+            return
+
+        df_ticks.loc[len(df_ticks)] = {
+            "timestamp": dt.now().timestamp(),
+            "Symbol": SYMBOL,
+            "close": ulying
+        }
+        r.add_prices(
+            df_ticks['timestamp'].iat[(0 + ival)],
+            df_ticks['close'].iat[(0 + ival)]
+        )
+        df_normal = r.renko_animate('normal', max_len=26, keep=25)
+        for key, candle in df_normal.iterrows():
+            st_dir, st = ST.update(candle)
+            # add the st value to respective row
+            # in the dataframe
+            df_normal.loc[key, 'st'] = st
+            df_normal.loc[key, 'st_dir'] = st_dir
+        # get direction and split colors of supertrend
+        df_normal = split_colors(df_normal)
+        # clear everytime
+        ax1.clear()
+        ax2.clear()
+        ic = [
+            # Supertrend
+            mpf.make_addplot(df_normal[['up']], color='green', ax=ax1,),
+            mpf.make_addplot(df_normal[['dn']], color='#FF8849', ax=ax1,),
+        ]
+        mpf.plot(
+            df_normal,
+            type='candle',
+            addplot=ic,
+            ax=ax1,
+            volume=ax2,
+            axtitle=SYMBOL)
+
+    df_ticks = pd.read_csv(F_HIST)
+    r = RenkoWS(
+        df_ticks['timestamp'].iat[0],
+        df_ticks['close'].iat[0],
+        brick_size=SETG[SYMBOL]['brick']
+    )
+    initial_df = r.initial_df
+    # init plot
+    fig, axes = mpf.plot(initial_df, returnfig=True, volume=True,
+                         figsize=(11, 8), panel_ratios=(2, 1),
+                         type='candle', style='charles')
+    ax1 = axes[0]
+    ax2 = axes[2]
+    mpf.plot(initial_df, type='candle', ax=ax1,
+             volume=ax2, axtitle='renko: normal')
+    # init super trend streaming indicator
+    ST = si.SuperTrend(SUPR['atr'], SUPR['multiplier'])
+    ani = animation.FuncAnimation(
+        fig, animate, interval=80, save_count=100)
+    mpf.show()
