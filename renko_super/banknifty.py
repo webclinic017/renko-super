@@ -11,7 +11,6 @@ import numpy as np
 import traceback
 import re
 from rich import print
-from typing import Dict
 
 try:
     SYMBOL = __import__("os").path.basename(__file__).split(".")[0].upper()
@@ -30,7 +29,9 @@ F_SIGN = DATA + "/signals.csv"
 def call_or_put_pos() -> str:
     pos = ""
     try:
-        pos = re.sub(SYMBOL, "", dct_pos['symbol'])[6]
+        length = len(SYMBOL) + 7
+        if len(dct_pos['symbol']) > length:
+            pos = dct_pos['symbol'][length]
     except Exception as e:
         logging.debug(f"{e} while getting option type")
     finally:
@@ -38,8 +39,8 @@ def call_or_put_pos() -> str:
         return pos
 
 
-def strip_positions():
-    lst_pos = []
+def strip_positions(symbol):
+    position = {}
     keys = [
         "symbol",
         "quantity",
@@ -49,33 +50,38 @@ def strip_positions():
     ]
     if any(lst_pos := api.positions):
         lst_pos = [{key: dct[key] for key in keys} for dct in lst_pos]
-    return lst_pos
+        lst_pos = [dct for dct in lst_pos if dct['symbol']
+                   == symbol and dct['quantity'] != 0]
+        logging.debug(f"found position {lst_pos=} from book")
+        if any(lst_pos):
+            position = lst_pos[0]
+    return position
 
 
 def _cls_pos_get_qty():
     qty_fm_stg = SETG[SYMBOL]['quantity']
     try:
-        if FUTL.is_file_exists(F_POS):
-            dct = FUTL.read_file(F_POS)
-            lst_pos = strip_positions()
-            dct_open_pos = [
-                pos for pos in lst_pos if pos['symbol'] == dct['tsym']][0]
-            if dct_open_pos['last_price'] > dct['entry_price']:
-                qty_fm_stg *= 2
-            args = dict(
-                symbol=dct["symbol"],
-                quantity=dct['quantity'],
-                disclosed_quantity=dct['quantity'],
-                product="M",
-                order_type="MKT",
-                side="S",
-                exchange="NFO",
-                tag="renko_super",
-            )
-            resp = api.order_place(**args)
-            logging.info(f"{resp} while closing positions")
+        dct = strip_positions(dct_pos["symbol"])
+        price = float(dct_pos["entry_price"])
+        if (
+            price > 0 and
+            dct['last_price'] > price
+        ):
+            qty_fm_stg *= 2
+        args = dict(
+            symbol=dct["symbol"],
+            quantity=dct['quantity'],
+            disclosed_quantity=dct['quantity'],
+            product="M",
+            order_type="MKT",
+            side="S",
+            exchange="NFO",
+            tag="renko_super",
+        )
+        resp = api.order_place(**args)
+        logging.info(f"{resp=} while closing positions {args=}")
     except Exception as e:
-        logging.debug(f"{e} while getting qty_fm_stg")
+        logging.debug(f"{e} while closing position .. {qty_fm_stg=}")
     finally:
         return qty_fm_stg
 
@@ -101,15 +107,20 @@ def _enter_and_write(symbol: str, quantity: int):
         exchange="NFO",
         tag="renko_super",
     )
-    logging.info(f"trying to enter position {args}")
     resp = api.order_place(**args)
-    FUTL.write_file(F_POS, args)
-    print(resp)
+    logging.info(f"enter position {args=} got {resp=}")
+    position = strip_positions(symbol)
+    if any(position):
+        position["entry_price"] = position["last_price"]
+        FUTL.write_file(F_POS, position)
+    logging.debug(f"returning {position=}")
+    return position
 
 
 def do(dets, opt: str):
+    atm = obj_sym.get_atm(dets.iloc[-1]["close"])
     itm_option = obj_sym.find_itm_option(
-        dets.iloc[-1]["close"],
+        atm,
         opt)
     new_pos = _enter_and_write(
         itm_option,
@@ -125,18 +136,19 @@ def get_ltp(api, symbol_token=None):
     try:
         if symbol_token:
             exchange = "NFO"
+            symbol_token = str(symbol_token)
         else:
-            exchange = SETG[SYMBOL]['key'].split("|")[0],
+            exchange = SETG[SYMBOL]['key'].split("|")[0]
             symbol_token = SETG[SYMBOL]['key'].split("|")[1]
-        resp = api.finvasia.get_quotes(
-            exchange,
-            symbol_token
-        )
+        resp = api.finvasia.get_quotes(exchange, symbol_token)
         if resp is None:
             raise Exception("No response")
-        quote = float(resp["lp"])
+        else:
+            quote = float(resp["lp"])
     except Exception as e:
+        print(exchange, symbol_token)
         logging.debug(f"{e} while getting ltp")
+        print(traceback.format_exc())
     finally:
         return quote
 
@@ -165,36 +177,29 @@ def split_colors(st: pd.DataFrame):
             dets.set_index("timestamp", inplace=True)
             dets.drop(columns=["open", "high", "low",
                       "up", "dn", "st_dir"], inplace=True)
-            if dets.iloc[-1]["close"] > dets.iloc[-1]["st"] and \
-                    call_or_put_pos() != "C":
-                do(dets, "C")
-            elif dets.iloc[-1]["close"] > dets.iloc[-1]["st"] and \
-                    call_or_put_pos() != "P":
-                do(dets, "P")
+            if (
+                dets.iloc[-1]["close"] > dets.iloc[-1]["st"] and
+                    call_or_put_pos() != "C"):
+                new_pos = do(dets, "C")
+            elif (
+                dets.iloc[-1]["close"] < dets.iloc[-1]["st"] and
+                    call_or_put_pos() != "P"):
+                new_pos = do(dets, "P")
             print("Signals \n", dets)
-        print("Data \n", st.tail(4))
+        print("Data \n", st.tail(2))
     except Exception as e:
         logging.debug(f"{e} while splitting colors")
         traceback.print_exc()
     return st, new_pos
 
 
-def read_positions_fm_file() -> Dict[str, str | int]:
+def read_positions_fm_file():
     """
         read overnight positions from file
-        inputs: None
-        outputs: position
     """
-    dct_pos = dict(
-        symbol="",
-        quantity=0,
-        entry_price=0,
-        last_price=0,
-        urmtom=0,
-    )
     if FUTL.is_file_exists(F_POS):
-        dct_pos = FUTL.read_file(F_POS)
-    return dct_pos
+        pos = FUTL.read_file(F_POS)
+        dct_pos.update(pos)
 
 
 def get_api():
@@ -203,9 +208,19 @@ def get_api():
         logging.error("Failed to authenticate")
         __import__("sys").exit(0)
     else:
+        print("Authenticated")
         return brkr
 
 
+dct_pos = dict(
+    symbol="",
+    quantity=0,
+    entry_price=0,
+    last_price=0,
+    urmtom=0,
+    rpnl=0,
+)
+read_positions_fm_file()
 obj_sym = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
 api = get_api()
 
@@ -218,7 +233,6 @@ def run():
             if ani.event_source.interval > 12000:
                 exit()
             return
-
         ulying = get_ltp(api)
         if ulying == 0:
             return
@@ -243,19 +257,22 @@ def run():
         df_normal, new_pos = split_colors(df_normal)
         # update positions if they are available
         if any(new_pos):
+            logging.debug(f"found {new_pos=}")
             dct_pos.update(new_pos)
+        else:
+            logging.debug("NO NEW POSITION YET")
         # update last_price and urmtom
-        if len(dct_pos['symbol']) > 0:
+        if len(dct_pos["symbol"]) > 5:
             token = dct_symtkns[dct_pos["symbol"]]
-            last_price = get_ltp(token)
-            urmtom = dct_pos["quantity"] * \
-                (last_price - dct_pos['entry_price'])
+            last_price = get_ltp(api, token)
+            pnl = float(last_price) - float(dct_pos['entry_price'])
+            urmtom = int(dct_pos["quantity"]) * pnl
             updates = {
                 "last_price": last_price,
                 "urmtom": urmtom
             }
             dct_pos.update(updates)
-        print(pd.DataFrame(dct_pos, index=[0]))
+        print("Positions \n", pd.DataFrame(dct_pos, index=[0]))
         # clear everytime
         ax1.clear()
         ax2.clear()
@@ -277,7 +294,6 @@ def run():
     """
     obj_sym.get_exchange_token_map_finvasia()
     dct_symtkns = obj_sym.get_all_tokens_from_csv()
-    dct_pos = read_positions_fm_file()
     df_ticks = pd.read_csv(F_HIST)
     r = RenkoWS(
         df_ticks['timestamp'].iat[0],
@@ -300,7 +316,8 @@ def run():
     mpf.show()
 
 
-run()
+if __name__ == "__main__":
+    run()
 
 
 """

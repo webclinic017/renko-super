@@ -9,5 +9,5 @@ renkodf
 pyarrow
 xlrd
 streaming-indicators
-termcolor
 pendulum
+rich
