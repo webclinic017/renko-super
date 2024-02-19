@@ -1,30 +1,14 @@
 import pandas as pd
-import re
 from constants import FUTL
-
-dct_sym = {
-    "NIFTY": {
-        "diff": 50,
-        "index": "Nifty 50",
-        "exch": "NSE",
-        "token": "26000",
-        "depth": 16,
-    },
-    "BANKNIFTY": {
-        "diff": 100,
-        "index": "Nifty Bank",
-        "exch": "NSE",
-        "token": "26009",
-        "depth": 25,
-    },
-}
 
 
 class Symbols:
-    def __init__(self, exch, symbol: str, expiry: str):
+    def __init__(self, exch: str, symbol: str,
+                 expiry: str, diff: int):
         self.exch = exch
         self.symbol = symbol
         self.expiry = expiry
+        self.diff = diff
         self.csvfile = f"./map_{self.symbol.lower()}.csv"
 
     def get_exchange_token_map_finvasia(self):
@@ -35,6 +19,7 @@ class Symbols:
             # filter the response
             df = df[
                 (df["Exchange"] == self.exch)
+                & (df["Symbol"] == self.symbol)
                 # & (df["TradingSymbol"].str.contains(self.symbol + self.expiry))
             ][["Token", "TradingSymbol"]]
             # split columns with necessary values
@@ -44,73 +29,26 @@ class Symbols:
             df.to_csv(self.csvfile, index=False)
 
     def get_atm(self, ltp) -> int:
-        current_strike = ltp - (ltp % dct_sym[self.symbol]["diff"])
-        next_higher_strike = current_strike + dct_sym[self.symbol]["diff"]
+        current_strike = ltp - (ltp % self.diff)
+        next_higher_strike = current_strike + self.diff
         if ltp - current_strike < next_higher_strike - ltp:
             return int(current_strike)
         return int(next_higher_strike)
 
-    def get_tokens(self, strike):
-        df = pd.read_csv(self.csvfile)
-        lst = []
-        lst.append(self.symbol + self.expiry + "C" + str(strike))
-        lst.append(self.symbol + self.expiry + "P" + str(strike))
-        for v in range(1, dct_sym[self.symbol]["depth"]):
-            lst.append(
-                self.symbol
-                + self.expiry
-                + "C"
-                + str(strike + v * dct_sym[self.symbol]["diff"])
-            )
-            lst.append(
-                self.symbol
-                + self.expiry
-                + "P"
-                + str(strike + v * dct_sym[self.symbol]["diff"])
-            )
-            lst.append(
-                self.symbol
-                + self.expiry
-                + "C"
-                + str(strike - v * dct_sym[self.symbol]["diff"])
-            )
-            lst.append(
-                self.symbol
-                + self.expiry
-                + "P"
-                + str(strike - v * dct_sym[self.symbol]["diff"])
-            )
-
-        df["Exchange"] = self.exch
-        tokens_found = (
-            df[df["TradingSymbol"].isin(lst)]
-            .assign(tknexc=df["Exchange"] + "|" + df["Token"].astype(str))[
-                ["tknexc", "TradingSymbol"]
-            ]
-            .set_index("tknexc")
-        )
-        dct = tokens_found.to_dict()
-        return dct["TradingSymbol"]
-
-    def find_option_type(self, tradingsymbol: str) -> str:
-        option_pattern = re.compile(rf"{self.symbol}{self.expiry}([CP])\d+")
-        match = option_pattern.match(tradingsymbol)
-        if match:
-            return match.group(1)  # Returns 'C' for call, 'P' for put
-        else:
-            return ""
-
     def find_itm_option(self,
                         atm_strike: int,
-                        ce_or_pe: str,
-                        depth: int) -> str:
+                        ce_or_pe: str) -> str:
         if ce_or_pe == "C":
             return self.symbol + self.expiry + ce_or_pe + \
-                str(atm_strike - depth)
-        elif ce_or_pe == "P":
+                str(atm_strike - self.diff)
+        else:
             return self.symbol + self.expiry + ce_or_pe + \
-                str(atm_strike - depth)
-        return ""
+                str(atm_strike + self.diff)
+
+    def get_all_tokens_from_csv(self):
+        df = pd.read_csv(self.csvfile)
+        dct = dict(zip(df["TradingSymbol"], df["Token"]))
+        return dct
 
 
 if __name__ == "__main__":
@@ -119,8 +57,7 @@ if __name__ == "__main__":
     try:
         symbols = Symbols("NFO", SYMBOL, SETG[SYMBOL]["expiry"])
         symbols.get_exchange_token_map_finvasia()
-        print(symbols.get_tokens(47000))
-        print(symbols.find_option_type(
-            SYMBOL + SETG[SYMBOL]["expiry"] + "C47000"))
+        dct = symbols.get_all_tokens_from_csv()
+        print(dct["BANKNIFTY29FEB24C48000"])
     except Exception as e:
         logging.debug(f"{e} while getting symbols")
