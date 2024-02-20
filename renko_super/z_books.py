@@ -32,7 +32,7 @@ def orders():
     print(pd.DataFrame(ord))
 
 
-def positions():
+def positions(search=None):
     positions = []
     positions = brkr.positions
     keys = [
@@ -45,10 +45,11 @@ def positions():
     if any(positions):
         # filter by dict keys
         positions = [{key: dct[key] for key in keys} for dct in positions]
+        if search:
+            positions = [
+                dct for dct in positions if dct['symbol'].beginswith(search)]
     print(pd.DataFrame(positions))
 
 
-ltp = brkr.finvasia.get_quotes("NFO", "45860")
-print(ltp)
 orders()
 positions()

@@ -1,5 +1,5 @@
 import pandas as pd
-from constants import FUTL
+from constants import DATA, FUTL
 
 
 class Symbols:
@@ -9,12 +9,11 @@ class Symbols:
         self.symbol = symbol
         self.expiry = expiry
         self.diff = diff
-        self.csvfile = f"./map_{self.symbol.lower()}.csv"
+        self.csvfile = f"{DATA}/{symbol}/map_{symbol.lower()}.csv"
 
     def get_exchange_token_map_finvasia(self):
         if FUTL.is_file_not_2day(self.csvfile):
             url = f"https://api.shoonya.com/{self.exch}_symbols.txt.zip"
-            print(f"{url}")
             df = pd.read_csv(url)
             # filter the response
             df = df[
@@ -55,7 +54,8 @@ if __name__ == "__main__":
     from constants import logging, SETG
     SYMBOL = "BANKNIFTY"
     try:
-        symbols = Symbols("NFO", SYMBOL, SETG[SYMBOL]["expiry"])
+        symbols = Symbols(
+            "NFO", SYMBOL, SETG[SYMBOL]["expiry"], SETG[SYMBOL]["diff"])
         symbols.get_exchange_token_map_finvasia()
         dct = symbols.get_all_tokens_from_csv()
         print(dct["BANKNIFTY29FEB24C48000"])

@@ -9,7 +9,6 @@ from datetime import datetime as dt
 import pandas as pd
 import numpy as np
 import traceback
-import re
 from rich import print
 
 try:
@@ -17,7 +16,7 @@ try:
     EXPIRY = SETG[SYMBOL]['expiry']
     DIFF = SETG[SYMBOL]['diff']
 except Exception as e:
-    logging.debug(f"{e} while getting constants")
+    logging.critical(f"{e} while getting constants")
     __import__("sys").exit(1)
 
 DATA += SYMBOL
@@ -30,12 +29,12 @@ def call_or_put_pos() -> str:
     pos = ""
     try:
         length = len(SYMBOL) + 7
-        if len(dct_pos['symbol']) > length:
-            pos = dct_pos['symbol'][length]
+        if len(G_POS['symbol']) > length:
+            pos = G_POS['symbol'][length]
     except Exception as e:
         logging.debug(f"{e} while getting option type")
     finally:
-        logging.info(f"call_or_put_pos: {pos}")
+        logging.debug(f"{G_POS['symbol']} call_or_put_pos: {pos}")
         return pos
 
 
@@ -48,7 +47,7 @@ def strip_positions(symbol):
         "urmtom",
         "rpnl",
     ]
-    if any(lst_pos := api.positions):
+    if any(lst_pos := O_API.positions):
         lst_pos = [{key: dct[key] for key in keys} for dct in lst_pos]
         lst_pos = [dct for dct in lst_pos if dct['symbol']
                    == symbol and dct['quantity'] != 0]
@@ -61,11 +60,11 @@ def strip_positions(symbol):
 def _cls_pos_get_qty():
     qty_fm_stg = SETG[SYMBOL]['quantity']
     try:
-        dct = strip_positions(dct_pos["symbol"])
-        price = float(dct_pos["entry_price"])
+        dct = strip_positions(G_POS["symbol"])
+        price = float(G_POS["entry_price"])
         if (
             price > 0 and
-            dct['last_price'] > price
+            dct['last_price'] >= price
         ):
             qty_fm_stg *= 2
         args = dict(
@@ -78,10 +77,11 @@ def _cls_pos_get_qty():
             exchange="NFO",
             tag="renko_super",
         )
-        resp = api.order_place(**args)
-        logging.info(f"{resp=} while closing positions {args=}")
+        resp = O_API.order_place(**args)
+        logging.debug(f"{resp=} while closing positions {args=}")
     except Exception as e:
-        logging.debug(f"{e} while closing position .. {qty_fm_stg=}")
+        logging.error(f"{e} while closing position .. {qty_fm_stg=}")
+        print(traceback.format_exc())
     finally:
         return qty_fm_stg
 
@@ -97,35 +97,41 @@ def _write_signal_to_file(dets):
 
 
 def _enter_and_write(symbol: str, quantity: int):
-    args = dict(
-        symbol=symbol,
-        quantity=quantity,
-        disclosed_quantity=quantity,
-        product="M",
-        order_type="MKT",
-        side="B",
-        exchange="NFO",
-        tag="renko_super",
-    )
-    resp = api.order_place(**args)
-    logging.info(f"enter position {args=} got {resp=}")
-    position = strip_positions(symbol)
-    if any(position):
-        position["entry_price"] = position["last_price"]
-        FUTL.write_file(F_POS, position)
-    logging.debug(f"returning {position=}")
-    return position
+    try:
+        position = {}
+        args = dict(
+            symbol=symbol,
+            quantity=quantity,
+            disclosed_quantity=quantity,
+            product="M",
+            order_type="MKT",
+            side="B",
+            exchange="NFO",
+            tag="renko_super",
+        )
+        resp = O_API.order_place(**args)
+        logging.debug(f"enter position {args=} got {resp=}")
+        position = strip_positions(symbol)
+        if any(position):
+            position["entry_price"] = position["last_price"]
+            FUTL.write_file(F_POS, position)
+    except Exception as e:
+        logging.error(f"{e} while entering position")
+        print(traceback.format_exc())
+    finally:
+        return position
 
 
 def do(dets, opt: str):
-    atm = obj_sym.get_atm(dets.iloc[-1]["close"])
-    itm_option = obj_sym.find_itm_option(
+    atm = O_SYM.get_atm(dets.iloc[-1]["close"])
+    itm_option = O_SYM.find_itm_option(
         atm,
         opt)
     new_pos = _enter_and_write(
         itm_option,
         _cls_pos_get_qty()
     )
+    dets["tx"] = opt
     _write_signal_to_file(dets)
     return new_pos
 
@@ -144,10 +150,9 @@ def get_ltp(api, symbol_token=None):
         if resp is None:
             raise Exception("No response")
         else:
-            quote = float(resp["lp"])
+            quote = int(float(resp["lp"]))
     except Exception as e:
-        print(exchange, symbol_token)
-        logging.debug(f"{e} while getting ltp")
+        logging.warning(f"{e} while getting ltp for {symbol_token=}")
         print(traceback.format_exc())
     finally:
         return quote
@@ -174,7 +179,7 @@ def split_colors(st: pd.DataFrame):
             dets = st.iloc[-1:].copy()
             dets["st"] = st.iloc[-2]["st"]
             dets["timestamp"] = dt.now()
-            dets.set_index("timestamp", inplace=True)
+            # dets.set_index("timestamp", inplace=True)
             dets.drop(columns=["open", "high", "low",
                       "up", "dn", "st_dir"], inplace=True)
             if (
@@ -188,7 +193,7 @@ def split_colors(st: pd.DataFrame):
             print("Signals \n", dets)
         print("Data \n", st.tail(2))
     except Exception as e:
-        logging.debug(f"{e} while splitting colors")
+        logging.warning(f"{e} while splitting colors")
         traceback.print_exc()
     return st, new_pos
 
@@ -199,7 +204,7 @@ def read_positions_fm_file():
     """
     if FUTL.is_file_exists(F_POS):
         pos = FUTL.read_file(F_POS)
-        dct_pos.update(pos)
+        G_POS.update(pos)
 
 
 def get_api():
@@ -212,7 +217,7 @@ def get_api():
         return brkr
 
 
-dct_pos = dict(
+G_POS = dict(
     symbol="",
     quantity=0,
     entry_price=0,
@@ -221,8 +226,8 @@ dct_pos = dict(
     rpnl=0,
 )
 read_positions_fm_file()
-obj_sym = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
-api = get_api()
+O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
+O_API = get_api()
 
 
 def run():
@@ -233,7 +238,7 @@ def run():
             if ani.event_source.interval > 12000:
                 exit()
             return
-        ulying = get_ltp(api)
+        ulying = get_ltp(O_API)
         if ulying == 0:
             return
 
@@ -258,21 +263,21 @@ def run():
         # update positions if they are available
         if any(new_pos):
             logging.debug(f"found {new_pos=}")
-            dct_pos.update(new_pos)
+            G_POS.update(new_pos)
         else:
             logging.debug("NO NEW POSITION YET")
         # update last_price and urmtom
-        if len(dct_pos["symbol"]) > 5:
-            token = dct_symtkns[dct_pos["symbol"]]
-            last_price = get_ltp(api, token)
-            pnl = float(last_price) - float(dct_pos['entry_price'])
-            urmtom = int(dct_pos["quantity"]) * pnl
+        if len(G_POS["symbol"]) > 5:
+            token = dct_symtkns[G_POS["symbol"]]
+            last_price = get_ltp(O_API, token)
+            pnl = float(last_price) - float(G_POS['entry_price'])
+            urmtom = int(G_POS["quantity"]) * pnl
             updates = {
                 "last_price": last_price,
                 "urmtom": urmtom
             }
-            dct_pos.update(updates)
-        print("Positions \n", pd.DataFrame(dct_pos, index=[0]))
+            G_POS.update(updates)
+        print("Positions \n", pd.DataFrame(G_POS, index=[0]))
         # clear everytime
         ax1.clear()
         ax2.clear()
@@ -292,8 +297,8 @@ def run():
     """
         begins to run here
     """
-    obj_sym.get_exchange_token_map_finvasia()
-    dct_symtkns = obj_sym.get_all_tokens_from_csv()
+    O_SYM.get_exchange_token_map_finvasia()
+    dct_symtkns = O_SYM.get_all_tokens_from_csv()
     df_ticks = pd.read_csv(F_HIST)
     r = RenkoWS(
         df_ticks['timestamp'].iat[0],
@@ -321,8 +326,8 @@ if __name__ == "__main__":
 
 
 """
-def get_api_and_wserver(obj_sym):
-    obj_sym.get_exchange_token_map_finvasia()
+def get_api_and_wserver(O_SYM):
+    O_SYM.get_exchange_token_map_finvasia()
     brkr = Finvasia(**BRKR)
     if not brkr.authenticate():
         logging.error("Failed to authenticate")
@@ -330,8 +335,8 @@ def get_api_and_wserver(obj_sym):
     else:
         quote = get_ltp(brkr)
         if quote > 0:
-            atm = obj_sym.get_atm(quote)
-            dct_tokens = obj_sym.get_tokens(atm)
+            atm = O_SYM.get_atm(quote)
+            dct_tokens = O_SYM.get_tokens(atm)
             print(dct_tokens)
             lst_tokens = list(dct_tokens.keys())
             print(lst_tokens)
