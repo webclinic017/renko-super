@@ -176,11 +176,9 @@ def split_colors(st: pd.DataFrame):
                 DN.append(np.nan)
         st['up'] = UP
         st['dn'] = DN
-        if len(st) > 0 and st.iloc[-1]['volume'] > 25:
-            dets = st.iloc[-1:].copy()
-            dets["st"] = st.iloc[-2]["st"]
+        if len(st) > 1 and st.iloc[-2]['volume'] > 25:
+            dets = st.iloc[-2:].copy()
             dets["timestamp"] = dt.now()
-            # dets.set_index("timestamp", inplace=True)
             dets.drop(columns=["open", "high", "low",
                       "up", "dn", "st_dir"], inplace=True)
             if (
