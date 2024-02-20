@@ -1,5 +1,5 @@
 from omspy_brokers.finvasia import Finvasia
-from constants import BRKR
+from constants import BRKR, DATA
 import pandas as pd
 
 brkr = Finvasia(**BRKR)
@@ -29,7 +29,8 @@ def orders():
     ]
     if any(ord):
         ord = [{k: d[k] for k in keys} for d in ord]
-    print(pd.DataFrame(ord))
+    df = pd.DataFrame(ord)
+    df.to_csv(f"{DATA}orders.csv", index=False)
 
 
 def positions(search=None):

@@ -17,6 +17,7 @@ try:
     DIFF = SETG[SYMBOL]['diff']
 except Exception as e:
     logging.critical(f"{e} while getting constants")
+    print(traceback.format_exc())
     __import__("sys").exit(1)
 
 DATA += SYMBOL
@@ -29,12 +30,12 @@ def call_or_put_pos() -> str:
     pos = ""
     try:
         length = len(SYMBOL) + 7
-        if len(G_POS['symbol']) > length:
-            pos = G_POS['symbol'][length]
+        if len(D_POS['symbol']) > length:
+            pos = D_POS['symbol'][length]
     except Exception as e:
         logging.debug(f"{e} while getting option type")
     finally:
-        logging.debug(f"{G_POS['symbol']} call_or_put_pos: {pos}")
+        logging.debug(f"{D_POS['symbol']} call_or_put_pos: {pos}")
         return pos
 
 
@@ -60,8 +61,8 @@ def strip_positions(symbol):
 def _cls_pos_get_qty():
     qty_fm_stg = SETG[SYMBOL]['quantity']
     try:
-        dct = strip_positions(G_POS["symbol"])
-        price = float(G_POS["entry_price"])
+        dct = strip_positions(D_POS["symbol"])
+        price = float(D_POS["entry_price"])
         if (
             price > 0 and
             dct['last_price'] >= price
@@ -204,7 +205,7 @@ def read_positions_fm_file():
     """
     if FUTL.is_file_exists(F_POS):
         pos = FUTL.read_file(F_POS)
-        G_POS.update(pos)
+        D_POS.update(pos)
 
 
 def get_api():
@@ -217,7 +218,7 @@ def get_api():
         return brkr
 
 
-G_POS = dict(
+D_POS = dict(
     symbol="",
     quantity=0,
     entry_price=0,
@@ -263,21 +264,21 @@ def run():
         # update positions if they are available
         if any(new_pos):
             logging.debug(f"found {new_pos=}")
-            G_POS.update(new_pos)
+            D_POS.update(new_pos)
         else:
             logging.debug("NO NEW POSITION YET")
         # update last_price and urmtom
-        if len(G_POS["symbol"]) > 5:
-            token = dct_symtkns[G_POS["symbol"]]
+        if len(D_POS["symbol"]) > 5:
+            token = dct_symtkns[D_POS["symbol"]]
             last_price = get_ltp(O_API, token)
-            pnl = float(last_price) - float(G_POS['entry_price'])
-            urmtom = int(G_POS["quantity"]) * pnl
+            pnl = float(last_price) - float(D_POS['entry_price'])
+            urmtom = int(D_POS["quantity"]) * pnl
             updates = {
                 "last_price": last_price,
                 "urmtom": urmtom
             }
-            G_POS.update(updates)
-        print("Positions \n", pd.DataFrame(G_POS, index=[0]))
+            D_POS.update(updates)
+        print("Positions \n", pd.DataFrame(D_POS, index=[0]))
         # clear everytime
         ax1.clear()
         ax2.clear()
