@@ -62,24 +62,31 @@ def _cls_pos_get_qty():
     qty_fm_stg = SETG[SYMBOL]['quantity']
     try:
         dct = strip_positions(D_POS["symbol"])
-        price = float(D_POS["entry_price"])
-        if (
-            price > 0 and
-            dct['last_price'] >= price
-        ):
-            qty_fm_stg *= 2
-        args = dict(
-            symbol=dct["symbol"],
-            quantity=dct['quantity'],
-            disclosed_quantity=dct['quantity'],
-            product="M",
-            order_type="MKT",
-            side="S",
-            exchange="NFO",
-            tag="renko_super",
-        )
-        resp = O_API.order_place(**args)
-        logging.debug(f"{resp=} while closing positions {args=}")
+        # if the position is found calculate pnl
+        if any(dct):
+            entry_price = float(D_POS["entry_price"])
+            last_price = float(D_POS["last_price"])
+            # checking if the entry price is factory set
+            if (
+                entry_price > 0 and
+                last_price > entry_price
+            ):
+                # mutliply lot if profitable
+                qty_fm_stg *= 2
+
+            # either way close the position
+            args = dict(
+                symbol=dct["symbol"],
+                quantity=dct['quantity'],
+                disclosed_quantity=dct['quantity'],
+                product="M",
+                order_type="MKT",
+                side="S",
+                exchange="NFO",
+                tag="renko_super",
+            )
+            resp = O_API.order_place(**args)
+            logging.debug(f"{resp=} while closing positions {args=}")
     except Exception as e:
         logging.error(f"{e} while closing position .. {qty_fm_stg=}")
         print(traceback.format_exc())
