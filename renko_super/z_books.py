@@ -30,6 +30,7 @@ def orders():
     if any(ord):
         ord = [{k: d[k] for k in keys} for d in ord]
     df = pd.DataFrame(ord)
+    print(pd.DataFrame(ord))
     df.to_csv(f"{DATA}orders.csv", index=False)
 
 

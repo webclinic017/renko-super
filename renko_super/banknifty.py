@@ -68,8 +68,8 @@ def _cls_pos_get_qty():
             last_price = float(D_POS["last_price"])
             # checking if the entry price is factory set
             if (
-                entry_price > 0 and
-                last_price > entry_price
+                (entry_price > 0) and
+                (last_price > entry_price)
             ):
                 # mutliply lot if profitable
                 qty_fm_stg *= 2
@@ -183,18 +183,22 @@ def split_colors(st: pd.DataFrame):
                 DN.append(np.nan)
         st['up'] = UP
         st['dn'] = DN
-        if len(st) > 1 and st.iloc[-2]['volume'] > 25:
-            dets = st.iloc[-2:].copy()
+        if len(st) > 1 and st.iloc[-1]['volume'] > 25:
+            dets = st.iloc[-2:-1].copy()
             dets["timestamp"] = dt.now()
-            dets.drop(columns=["open", "high", "low",
+            dets.drop(columns=["high", "low",
                       "up", "dn", "st_dir"], inplace=True)
             if (
                 dets.iloc[-1]["close"] > dets.iloc[-1]["st"] and
-                    call_or_put_pos() != "C"):
+                    call_or_put_pos() != "C" and
+                    dets.iloc[-1]["close"] > dets.iloc[-1]["open"]
+            ):
                 new_pos = do(dets, "C")
             elif (
                 dets.iloc[-1]["close"] < dets.iloc[-1]["st"] and
-                    call_or_put_pos() != "P"):
+                call_or_put_pos() != "P" and
+                    dets.iloc[-1]["close"] < dets.iloc[-1]["open"]
+            ):
                 new_pos = do(dets, "P")
             print("Signals \n", dets)
         print("Data \n", st.tail(2))
