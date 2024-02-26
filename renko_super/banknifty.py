@@ -25,7 +25,7 @@ F_HIST = DATA + "/history.csv"
 F_POS = DATA + "/position.json"
 F_SIGN = DATA + "/signals.csv"
 G_MODE_TRADE = False
-MAGIC = 21
+MAGIC = 15
 
 
 def call_or_put_pos() -> str:
