@@ -24,6 +24,8 @@ DATA += SYMBOL
 F_HIST = DATA + "/history.csv"
 F_POS = DATA + "/position.json"
 F_SIGN = DATA + "/signals.csv"
+G_MODE_TRADE = False
+MAGIC = 21
 
 
 def call_or_put_pos() -> str:
@@ -167,6 +169,7 @@ def get_ltp(api, symbol_token=None):
 
 
 def split_colors(st: pd.DataFrame):
+    global G_MODE_TRADE
     try:
         new_pos = {}
         UP = []
@@ -183,7 +186,9 @@ def split_colors(st: pd.DataFrame):
                 DN.append(np.nan)
         st['up'] = UP
         st['dn'] = DN
-        if len(st) > 1 and st.iloc[-1]['volume'] > 25:
+        if len(st) > 1 and st.iloc[-1]['volume'] > MAGIC:
+            G_MODE_TRADE = True
+        if G_MODE_TRADE:
             dets = st.iloc[-2:-1].copy()
             dets["timestamp"] = dt.now()
             dets.drop(columns=["high", "low",
@@ -261,7 +266,7 @@ def run():
             df_ticks['timestamp'].iat[(0 + ival)],
             df_ticks['close'].iat[(0 + ival)]
         )
-        df_normal = r.renko_animate('normal', max_len=26, keep=25)
+        df_normal = r.renko_animate('normal', max_len=MAGIC, keep=MAGIC-1)
         for key, candle in df_normal.iterrows():
             st_dir, st = ST.update(candle)
             # add the st value to respective row
@@ -333,32 +338,3 @@ def run():
 
 if __name__ == "__main__":
     run()
-
-
-"""
-def get_api_and_wserver(O_SYM):
-    O_SYM.get_exchange_token_map_finvasia()
-    brkr = Finvasia(**BRKR)
-    if not brkr.authenticate():
-        logging.error("Failed to authenticate")
-        __import__("sys").exit(0)
-    else:
-        quote = get_ltp(brkr)
-        if quote > 0:
-            atm = O_SYM.get_atm(quote)
-            dct_tokens = O_SYM.get_tokens(atm)
-            print(dct_tokens)
-            lst_tokens = list(dct_tokens.keys())
-            print(lst_tokens)
-            wserver = Wserver(brkr, lst_tokens, dct_tokens)
-        else:
-            logging.error("Failed to get quote")
-            __import__("sys").exit(0)
-    quotes = {}
-    while not any(quotes):
-        # dataframe from dictionary
-        quotes = wserver.ltp
-        UTIL.slp_til_nxt_sec()
-    print(quotes)
-    return brkr, wserver
-"""

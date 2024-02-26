@@ -82,4 +82,34 @@ if __name__ == "__main__":
     print(pd.DataFrame(brkr.positions))
     while True:
         print(wserver.ltp)
-        sleep(1)
+
+"""
+moved from banknifty and nifty
+
+def get_api_and_wserver(O_SYM):
+    O_SYM.get_exchange_token_map_finvasia()
+    brkr = Finvasia(**BRKR)
+    if not brkr.authenticate():
+        logging.error("Failed to authenticate")
+        __import__("sys").exit(0)
+    else:
+        quote = get_ltp(brkr)
+        if quote > 0:
+            atm = O_SYM.get_atm(quote)
+            dct_tokens = O_SYM.get_tokens(atm)
+            print(dct_tokens)
+            lst_tokens = list(dct_tokens.keys())
+            print(lst_tokens)
+            wserver = Wserver(brkr, lst_tokens, dct_tokens)
+        else:
+            logging.error("Failed to get quote")
+            __import__("sys").exit(0)
+    quotes = {}
+    while not any(quotes):
+        # dataframe from dictionary
+        quotes = wserver.ltp
+        UTIL.slp_til_nxt_sec()
+    print(quotes)
+    return brkr, wserver
+"""
+sleep(1)
