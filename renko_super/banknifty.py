@@ -11,6 +11,9 @@ import numpy as np
 import traceback
 from rich import print
 import os
+import pendulum
+import downloader
+import sys
 
 if os.path.exists(DATA + "/animation.mp4"):
     os.remove(DATA + "/animation.mp4")
@@ -29,6 +32,17 @@ F_POS = DATA + "/position.json"
 F_SIGN = DATA + "/signals.csv"
 G_MODE_TRADE = False
 MAGIC = 15
+
+
+def is_time_reached(time_in_config):
+    # check if current time is greater than time as per configuration
+    # and return True or False
+    entry_time = time_in_config.split(":")
+    current_time = pendulum.now(pendulum.timezone("Asia/Kolkata"))
+    target_time = current_time.replace(
+        hour=int(entry_time[0]), minute=int(entry_time[1]), second=0, microsecond=0
+    )
+    return False if current_time < target_time else True
 
 
 def call_or_put_pos() -> str:
@@ -338,6 +352,13 @@ def run():
         fig, animate, interval=80, save_count=100)
     ani.save(DATA + "/animation.mp4")
     mpf.show()
+    if is_time_reached('15:30'):
+        try:
+            downloader.main()
+        except:
+            pass
+        sys.exit()
+
 
 
 if __name__ == "__main__":
