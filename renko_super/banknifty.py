@@ -10,7 +10,10 @@ import pandas as pd
 import numpy as np
 import traceback
 from rich import print
+import os
 
+if os.path.exists(DATA + "/animation.mp4"):
+    os.remove(DATA + "/animation.mp4")
 try:
     SYMBOL = __import__("os").path.basename(__file__).split(".")[0].upper()
     EXPIRY = SETG[SYMBOL]['expiry']
@@ -333,6 +336,7 @@ def run():
     ST = si.SuperTrend(SUPR['atr'], SUPR['multiplier'])
     ani = animation.FuncAnimation(
         fig, animate, interval=80, save_count=100)
+    ani.save(DATA + "/animation.mp4")
     mpf.show()
 
 
