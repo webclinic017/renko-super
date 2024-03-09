@@ -4,6 +4,8 @@ from omspy_brokers.finvasia import Finvasia
 from renkodf import RenkoWS
 import streaming_indicators as si
 import mplfinance as mpf
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib import animation
 from datetime import datetime as dt
 import pandas as pd
@@ -15,8 +17,8 @@ import pendulum
 import downloader
 import sys
 
-if os.path.exists(DATA + "/animation.mp4"):
-    os.remove(DATA + "/animation.mp4")
+if os.path.exists(DATA + "/animation.apng"):
+    os.remove(DATA + "/animation.apng")
 try:
     SYMBOL = __import__("os").path.basename(__file__).split(".")[0].upper()
     EXPIRY = SETG[SYMBOL]['expiry']
@@ -349,8 +351,8 @@ def run():
     # init super trend streaming indicator
     ST = si.SuperTrend(SUPR['atr'], SUPR['multiplier'])
     ani = animation.FuncAnimation(
-        fig, animate, interval=80, save_count=100)
-    ani.save(DATA + "/animation.mp4")
+        fig, animate, interval=80)
+    ani.save(DATA + "/animation.apng", bitrate=1, fps=1, writer="pillow")
     mpf.show()
     if is_time_reached('15:30'):
         try:
