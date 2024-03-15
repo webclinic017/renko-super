@@ -4,8 +4,6 @@ from omspy_brokers.finvasia import Finvasia
 from renkodf import RenkoWS
 import streaming_indicators as si
 import mplfinance as mpf
-import matplotlib
-matplotlib.use('Agg')
 from matplotlib import animation
 from datetime import datetime as dt
 import pandas as pd
@@ -15,10 +13,8 @@ from rich import print
 import os
 import pendulum
 import downloader
-import sys
 
-if os.path.exists(DATA + "/animation.apng"):
-    os.remove(DATA + "/animation.apng")
+
 try:
     SYMBOL = __import__("os").path.basename(__file__).split(".")[0].upper()
     EXPIRY = SETG[SYMBOL]['expiry']
@@ -34,6 +30,10 @@ F_POS = DATA + "/position.json"
 F_SIGN = DATA + "/signals.csv"
 G_MODE_TRADE = False
 MAGIC = 15
+F_ANIM = DATA + "/ani.apng"
+
+if os.path.exists(F_ANIM):
+    os.remove(F_ANIM)
 
 
 def is_time_reached(time_in_config):
@@ -93,7 +93,7 @@ def _cls_pos_get_qty():
                 (last_price > entry_price)
             ):
                 # mutliply lot if profitable
-                qty_fm_stg *= 2
+                qty_fm_stg = 1 * SETG[SYMBOL]['quantity']
 
             # either way close the position
             args = dict(
@@ -205,27 +205,39 @@ def split_colors(st: pd.DataFrame):
                 DN.append(np.nan)
         st['up'] = UP
         st['dn'] = DN
-        if len(st) > 1 and st.iloc[-1]['volume'] > MAGIC:
-            G_MODE_TRADE = True
-        if G_MODE_TRADE:
+
+        if len(st) > 1:
             dets = st.iloc[-2:-1].copy()
             dets["timestamp"] = dt.now()
             dets.drop(columns=["high", "low",
                       "up", "dn", "st_dir"], inplace=True)
-            if (
-                dets.iloc[-1]["close"] > dets.iloc[-1]["st"] and
-                    call_or_put_pos() != "C" and
-                    dets.iloc[-1]["close"] > dets.iloc[-1]["open"]
-            ):
-                new_pos = do(dets, "C")
-            elif (
-                dets.iloc[-1]["close"] < dets.iloc[-1]["st"] and
-                call_or_put_pos() != "P" and
-                    dets.iloc[-1]["close"] < dets.iloc[-1]["open"]
-            ):
-                new_pos = do(dets, "P")
-            print("Signals \n", dets)
-        print("Data \n", st.tail(2))
+
+            # we are not live yet
+            if not G_MODE_TRADE:
+                if st.iloc[-1]['volume'] > MAGIC:
+                    G_MODE_TRADE = True
+                    if st.iloc[-1]['st_dir'] == 1 and \
+                            call_or_put_pos() != "C":
+                        new_pos = do(dets, "C")
+                    elif st.iloc[-1]['st_dir'] == -1 and \
+                            call_or_put_pos() != "P":
+                        new_pos = do(dets, "P")
+            else:
+                if (
+                    dets.iloc[-1]["close"] > dets.iloc[-1]["st"] and
+                        call_or_put_pos() != "C" and
+                        dets.iloc[-1]["close"] > dets.iloc[-1]["open"]
+                ):
+                    new_pos = do(dets, "C")
+                elif (
+                    dets.iloc[-1]["close"] < dets.iloc[-1]["st"] and
+                    call_or_put_pos() != "P" and
+                        dets.iloc[-1]["close"] < dets.iloc[-1]["open"]
+                ):
+                    new_pos = do(dets, "P")
+                print("Signals \n", dets)
+            print("Data \n", st.tail(2))
+        print(f"Ready to take Trade ? {G_MODE_TRADE}")
     except Exception as e:
         logging.warning(f"{e} while splitting colors")
         traceback.print_exc()
@@ -264,7 +276,7 @@ O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
 O_API = get_api()
 
 
-def run():
+def run(suppress_video=False):
     def animate(ival):
         if (0 + ival) >= len(df_ticks):
             logging.error('no more data to plot')
@@ -352,16 +364,23 @@ def run():
     ST = si.SuperTrend(SUPR['atr'], SUPR['multiplier'])
     ani = animation.FuncAnimation(
         fig, animate, interval=80)
-    ani.save(DATA + "/animation.apng", bitrate=1, fps=1, writer="pillow")
-    mpf.show()
-    if is_time_reached('15:30'):
-        try:
-            downloader.main()
-        except:
-            pass
-        sys.exit()
-
+    try:
+        if suppress_video:
+            ani.save(F_ANIM,
+                     bitrate=1,  fps=1,
+                     writer="pillow")
+        if is_time_reached('15:30'):
+            try:
+                downloader.main()
+            except Exception as e:
+                print(e)
+            SystemExit()
+        mpf.show()
+    except Exception as e:
+        logging.warning(f"animation {e}")
+        pass
 
 
 if __name__ == "__main__":
-    run()
+    host = __import__("socket").gethostname()
+    run("ecomsense" in host)
