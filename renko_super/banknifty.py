@@ -383,4 +383,4 @@ def run(suppress_video=False):
 
 if __name__ == "__main__":
     host = __import__("socket").gethostname()
-    run("ecomsense" in host)
+    run("server1" in host)
