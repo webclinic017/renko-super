@@ -208,15 +208,15 @@ def split_colors(st: pd.DataFrame):
         st['up'] = UP
         st['dn'] = DN
 
-        if len(st) > 1:
-            dets = st.iloc[-2:-1].copy()
+        if len(st) > 2:
+            dets = st.iloc[-3:-1].copy()
             dets["timestamp"] = dt.now()
-            dets.drop(columns=["high", "low",
-                      "up", "dn", "st_dir"], inplace=True)
 
             # we are not live yet
             if not G_MODE_TRADE:
                 if st.iloc[-1]['volume'] > MAGIC:
+                    dets.drop(columns=["high", "low",
+                      "up", "dn", "st_dir"], inplace=True)
                     G_MODE_TRADE = True
                     if st.iloc[-1]['st_dir'] == 1 and \
                             call_or_put_pos() != "C":
@@ -226,16 +226,21 @@ def split_colors(st: pd.DataFrame):
                         new_pos = do(dets, "P")
             else:
                 if (
-                    dets.iloc[-1]["close"] > dets.iloc[-1]["st"] and
-                        call_or_put_pos() != "C" and
-                        dets.iloc[-1]["close"] > dets.iloc[-1]["open"]
+                    dets.iloc[-2]["open"] < dets.iloc[-1]["ema"] and
+                        call_or_put_pos() != "C" and ## why are we doing this??
+                        dets.iloc[-1]["close"] > dets.iloc[-1]["ema"]
                 ):
+                    dets.drop(columns=["high", "low",
+                      "up", "dn", "st_dir"], inplace=True)
                     new_pos = do(dets, "C")
                 elif (
-                    dets.iloc[-1]["close"] < dets.iloc[-1]["st"] and
-                    call_or_put_pos() != "P" and
-                        dets.iloc[-1]["close"] < dets.iloc[-1]["open"]
+                    dets.iloc[-2]["open"] < dets.iloc[-2]["close"] and
+                    dets.iloc[-2]["close"] > dets.iloc[-1]["ema"] and
+                    call_or_put_pos() != "P" and ## why are we doing this??
+                        dets.iloc[-2]["close"] > dets.iloc[-1]["st"]
                 ):
+                    dets.drop(columns=["high", "low",
+                      "up", "dn", "st_dir"], inplace=True)
                     new_pos = do(dets, "P")
                 print("Signals \n", dets)
             print("Data \n", st.tail(2))
@@ -328,15 +333,16 @@ def run():
             # in the dataframe
             df_normal.loc[key, 'st'] = st
             df_normal.loc[key, 'st_dir'] = st_dir
-            # val = (candle["high"] + candle["low"] + candle["close"]) / 3
-            # df_normal.loc[key, 'ema'] = EMA_.update(val)
-            
+            val = (candle["high"] + candle["low"] + candle["close"]) / 3
+            df_normal.loc[key, 'ema'] = EMA_.update(val)
+        
         # get direction and split colors of supertrend
         df_normal, new_pos = split_colors(df_normal)
         try:
             df_normal.to_csv("banknifty_v2_df_normal.csv")
         except:
             pass
+        
         # update positions if they are available
         if any(new_pos):
             logging.debug(f"found {new_pos=}")
