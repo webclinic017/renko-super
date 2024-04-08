@@ -14,6 +14,7 @@ import os
 import pendulum
 import downloader
 
+_val = 0
 
 try:
     SYMBOL = __import__("os").path.basename(__file__).split(".")[0].upper()
@@ -226,16 +227,16 @@ def split_colors(st: pd.DataFrame):
                         new_pos = do(dets, "P")
             else:
                 if (
-                    dets.iloc[-2]["open"] < dets.iloc[-1]["ema"] and
+                    dets.iloc[-2]["open"] < dets.iloc[-2]["ema"] and
                         call_or_put_pos() != "C" and ## why are we doing this??
-                        dets.iloc[-1]["close"] > dets.iloc[-1]["ema"]
+                        dets.iloc[-1]["close"] > dets.iloc[-2]["ema"]
                 ):
                     dets.drop(columns=["high", "low",
                       "up", "dn", "st_dir"], inplace=True)
                     new_pos = do(dets, "C")
                 elif (
                     dets.iloc[-2]["open"] < dets.iloc[-2]["close"] and
-                    dets.iloc[-2]["close"] > dets.iloc[-1]["ema"] and
+                    dets.iloc[-2]["close"] > dets.iloc[-2]["ema"] and
                     call_or_put_pos() != "P" and ## why are we doing this??
                         dets.iloc[-2]["close"] > dets.iloc[-1]["st"]
                 ):
@@ -269,7 +270,6 @@ def get_api():
         print("Authenticated")
         return brkr
 
-
 D_POS = dict(
     symbol="",
     quantity=0,
@@ -281,7 +281,8 @@ D_POS = dict(
 read_positions_fm_file()
 O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
 O_API = get_api()
-
+ST = si.SuperTrend(SUPR['atr'], SUPR['multiplier'])
+EMA_ = si.EMA(EMA_SETG["period"])
 
 def run():
     
@@ -307,8 +308,7 @@ def run():
     # mpf.plot(initial_df, type='candle', ax=ax1,
     #          volume=ax2, axtitle='renko: normal')
     # init super trend streaming indicator
-    ST = si.SuperTrend(SUPR['atr'], SUPR['multiplier'])
-    EMA_ = si.EMA(EMA_SETG["period"])
+    
     ival = 0
     while not is_time_reached('15:30'):
         if (0 + ival) >= len(df_ticks):
@@ -326,7 +326,8 @@ def run():
             df_ticks['timestamp'].iat[(0 + ival)],
             df_ticks['close'].iat[(0 + ival)]
         )
-        df_normal = r.renko_animate('normal', max_len=MAGIC, keep=MAGIC-1)
+        df_normal = r.renko_animate('normal')
+        # df_normal.to_csv(f"df_normal_{ival}.csv")
         for key, candle in df_normal.iterrows():
             st_dir, st = ST.update(candle)
             # add the st value to respective row
