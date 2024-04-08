@@ -1,4 +1,4 @@
-from constants import logging, BRKR, DATA, FUTL, SETG, SUPR, UTIL
+from constants import logging, BRKR, DATA, FUTL, SETG, SUPR, UTIL, EMA_SETG
 from symbols import Symbols
 from omspy_brokers.finvasia import Finvasia
 from renkodf import RenkoWS
@@ -303,8 +303,11 @@ def run():
     #          volume=ax2, axtitle='renko: normal')
     # init super trend streaming indicator
     ST = si.SuperTrend(SUPR['atr'], SUPR['multiplier'])
+    EMA_ = si.EMA(EMA_SETG["period"])
+    ival = 0
     while not is_time_reached('15:30'):
-        ival = 0
+        if (0 + ival) >= len(df_ticks):
+            continue
         ulying = get_ltp(O_API)
         if ulying == 0:
             return
@@ -325,6 +328,9 @@ def run():
             # in the dataframe
             df_normal.loc[key, 'st'] = st
             df_normal.loc[key, 'st_dir'] = st_dir
+            # val = (candle["high"] + candle["low"] + candle["close"]) / 3
+            # df_normal.loc[key, 'ema'] = EMA_.update(val)
+            
         # get direction and split colors of supertrend
         df_normal, new_pos = split_colors(df_normal)
         try:
