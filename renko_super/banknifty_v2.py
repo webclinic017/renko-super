@@ -319,7 +319,6 @@ def run():
             df_ticks['close'].iat[(0 + ival)]
         )
         df_normal = r.renko_animate('normal', max_len=MAGIC, keep=MAGIC-1)
-        print(df_normal.head())
         for key, candle in df_normal.iterrows():
             st_dir, st = ST.update(candle)
             # add the st value to respective row
@@ -328,6 +327,10 @@ def run():
             df_normal.loc[key, 'st_dir'] = st_dir
         # get direction and split colors of supertrend
         df_normal, new_pos = split_colors(df_normal)
+        try:
+            df_normal.to_csv("banknifty_v2_df_normal.csv")
+        except:
+            pass
         # update positions if they are available
         if any(new_pos):
             logging.debug(f"found {new_pos=}")
@@ -345,6 +348,10 @@ def run():
                 "urmtom": urmtom
             }
             D_POS.update(updates)
+        try:
+            pd.DataFrame(D_POS, index=[0]).to_csv("banknifty_v2.csv")
+        except:
+            pass
         print("Positions \n", pd.DataFrame(D_POS, index=[0]))
         ival += 1
     try:

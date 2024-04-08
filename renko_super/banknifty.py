@@ -306,6 +306,10 @@ def run(suppress_video=False):
             df_normal.loc[key, 'st_dir'] = st_dir
         # get direction and split colors of supertrend
         df_normal, new_pos = split_colors(df_normal)
+        try:
+            df_normal.to_csv("banknifty_df_normal.csv")
+        except:
+            pass
         # update positions if they are available
         if any(new_pos):
             logging.debug(f"found {new_pos=}")
@@ -323,6 +327,10 @@ def run(suppress_video=False):
                 "urmtom": urmtom
             }
             D_POS.update(updates)
+        try:
+            pd.DataFrame(D_POS, index=[0]).to_csv("banknifty.csv")
+        except:
+            pass
         print("Positions \n", pd.DataFrame(D_POS, index=[0]))
         # clear everytime
         ax1.clear()
