@@ -1,4 +1,4 @@
-from constants import logging, BRKR, DATA, FUTL, SETG, SUPR, UTIL, EMA_SETG
+from constants import BRKR, DATA, FUTL, SETG, SUPR, UTIL, EMA_SETG
 from symbols import Symbols
 from omspy_brokers.finvasia import Finvasia
 from renkodf import RenkoWS
@@ -10,11 +10,12 @@ import pandas as pd
 import numpy as np
 import traceback
 from rich import print
-import os
+import sys
 import pendulum
 import downloader
+from logzero import logger, logfile
 
-_val = 0
+logfile("./renko_super.log")
 
 try:
     SYMBOL = __import__("os").path.basename(__file__).split(".")[0].upper()
@@ -23,7 +24,7 @@ try:
     EXPIRY = SETG[SYMBOL]['expiry']
     DIFF = SETG[SYMBOL]['diff']
 except Exception as e:
-    logging.critical(f"{e} while getting constants")
+    logger.critical(f"{e} while getting constants")
     print(traceback.format_exc())
     __import__("sys").exit(1)
 
@@ -57,9 +58,9 @@ def call_or_put_pos() -> str:
         if len(D_POS['symbol']) > length:
             pos = D_POS['symbol'][length]
     except Exception as e:
-        logging.debug(f"{e} while getting option type")
+        logger.debug(f"{e} while getting option type")
     finally:
-        logging.debug(f"{D_POS['symbol']} call_or_put_pos: {pos}")
+        logger.debug(f"{D_POS['symbol']} call_or_put_pos: {pos}")
         return pos
 
 
@@ -76,7 +77,7 @@ def strip_positions(symbol):
         lst_pos = [{key: dct[key] for key in keys} for dct in lst_pos]
         lst_pos = [dct for dct in lst_pos if dct['symbol']
                    == symbol and dct['quantity'] != 0]
-        logging.debug(f"found position {lst_pos=} from book")
+        logger.debug(f"found position {lst_pos=} from book")
         if any(lst_pos):
             position = lst_pos[0]
     return position
@@ -110,9 +111,9 @@ def _cls_pos_get_qty():
                 tag="renko_super",
             )
             resp = O_API.order_place(**args)
-            logging.debug(f"{resp=} while closing positions {args=}")
+            logger.debug(f"{resp=} while closing positions {args=}")
     except Exception as e:
-        logging.error(f"{e} while closing position .. {qty_fm_stg=}")
+        logger.error(f"{e} while closing position .. {qty_fm_stg=}")
         print(traceback.format_exc())
     finally:
         return qty_fm_stg
@@ -142,28 +143,24 @@ def _enter_and_write(symbol: str, quantity: int):
             tag="renko_super",
         )
         resp = O_API.order_place(**args)
-        logging.debug(f"enter position {args=} got {resp=}")
+        logger.debug(f"enter position {args=} got {resp=}")
         position = strip_positions(symbol)
         if any(position):
             position["entry_price"] = position["last_price"]
             FUTL.write_file(F_POS, position)
     except Exception as e:
-        logging.error(f"{e} while entering position")
+        logger.error(f"{e} while entering position")
         print(traceback.format_exc())
     finally:
         return position
 
 
 def do(dets, opt: str):
-    atm = O_SYM.get_atm(dets.iloc[-1]["close"])
-    itm_option = O_SYM.find_itm_option(
-        atm,
-        opt)
     new_pos = _enter_and_write(
-        itm_option,
+        opt,
         _cls_pos_get_qty()
     )
-    dets["tx"] = opt
+    dets["tx"] = opt[-6]  
     _write_signal_to_file(dets)
     return new_pos
 
@@ -184,13 +181,13 @@ def get_ltp(api, symbol_token=None):
         else:
             quote = int(float(resp["lp"]))
     except Exception as e:
-        logging.warning(f"{e} while getting ltp for {symbol_token=}")
+        logger.warning(f"{e} while getting ltp for {symbol_token=}")
         print(traceback.format_exc())
     finally:
         return quote
 
 
-def split_colors(st: pd.DataFrame):
+def split_colors(st: pd.DataFrame, option_name: str):
     global G_MODE_TRADE
     try:
         new_pos = {}
@@ -221,10 +218,10 @@ def split_colors(st: pd.DataFrame):
                     G_MODE_TRADE = True
                     if st.iloc[-1]['st_dir'] == 1 and \
                             call_or_put_pos() != "C":
-                        new_pos = do(dets, "C")
+                        new_pos = do(dets, option_name)
                     elif st.iloc[-1]['st_dir'] == -1 and \
                             call_or_put_pos() != "P":
-                        new_pos = do(dets, "P")
+                        new_pos = do(dets, option_name)
             else:
                 if (
                     dets.iloc[-2]["open"] < dets.iloc[-2]["ema"] and
@@ -233,7 +230,7 @@ def split_colors(st: pd.DataFrame):
                 ):
                     dets.drop(columns=["high", "low",
                       "up", "dn", "st_dir"], inplace=True)
-                    new_pos = do(dets, "C")
+                    new_pos = do(dets, option_name)
                 elif (
                     dets.iloc[-2]["open"] < dets.iloc[-2]["close"] and
                     dets.iloc[-2]["close"] > dets.iloc[-2]["ema"] and
@@ -242,12 +239,12 @@ def split_colors(st: pd.DataFrame):
                 ):
                     dets.drop(columns=["high", "low",
                       "up", "dn", "st_dir"], inplace=True)
-                    new_pos = do(dets, "P")
+                    new_pos = do(dets, option_name)
                 print("Signals \n", dets)
             print("Data \n", st.tail(2))
         print(f"Ready to take Trade ? {G_MODE_TRADE}")
     except Exception as e:
-        logging.warning(f"{e} while splitting colors")
+        logger.warning(f"{e} while splitting colors")
         traceback.print_exc()
     return st, new_pos
 
@@ -264,7 +261,7 @@ def read_positions_fm_file():
 def get_api():
     brkr = Finvasia(**BRKR)
     if not brkr.authenticate():
-        logging.error("Failed to authenticate")
+        logger.error("Failed to authenticate")
         __import__("sys").exit(0)
     else:
         print("Authenticated")
@@ -284,6 +281,25 @@ O_API = get_api()
 ST = si.SuperTrend(SUPR['atr'], SUPR['multiplier'])
 EMA_ = si.EMA(EMA_SETG["period"])
 
+
+
+def get_historical_for_option(tkn, option_name):
+    lastBusDay = pendulum.now()
+    fromBusDay = lastBusDay.replace(
+        hour=9, minute=15, second=0, microsecond=0).subtract(days=7)    
+    resp = O_API.historical(
+        "NFO", tkn, fromBusDay.timestamp(), lastBusDay.timestamp(), 15
+    )
+    if not resp:
+        logger.error(f"Historical data is not available for {option_name}. Exiting")
+        sys.exit()
+    df = pd.DataFrame(resp).iloc[:100].iloc[::-1]
+    df = df[["time", "intc"]]
+    df['timestamp'] = pd.to_datetime(df['time'], format='%d-%m-%Y %H:%M:%S').astype('int64')// 10**9
+    df.rename(columns={"intc": "close", "time":"timestamp_column"}, inplace=True)
+    df["close"] = df["close"].astype("float")
+    return df
+
 def run():
     
 
@@ -292,85 +308,86 @@ def run():
     """
     O_SYM.get_exchange_token_map_finvasia()
     dct_symtkns = O_SYM.get_all_tokens_from_csv()
-    df_ticks = pd.read_csv(F_HIST)
-    r = RenkoWS(
-        df_ticks['timestamp'].iat[0],
-        df_ticks['close'].iat[0],
-        brick_size=SETG[SYMBOL]['brick']
-    )
-    # initial_df = r.initial_df
-    # init plot
-    # fig, axes = mpf.plot(initial_df, returnfig=True, volume=True,
-    #                      figsize=(11, 8), panel_ratios=(2, 1),
-    #                      type='candle', style='charles')
-    # ax1 = axes[0]
-    # ax2 = axes[2]
-    # mpf.plot(initial_df, type='candle', ax=ax1,
-    #          volume=ax2, axtitle='renko: normal')
-    # init super trend streaming indicator
+    atm = O_SYM.get_atm(get_ltp(O_API))
+    ce_option, pe_option = O_SYM.find_itm_option(atm, "C"), O_SYM.find_itm_option(atm, "P")
+    option_details = {
+        ce_option: pd.DataFrame(),
+        pe_option: pd.DataFrame()
+    }
+    df_ticks = pd.DataFrame()
+    
     
     ival = 0
-    while not is_time_reached('15:30'):
-        if (0 + ival) >= len(df_ticks):
-            continue
-        ulying = get_ltp(O_API)
-        if ulying == 0:
-            return
+    while not is_time_reached('22:30'):
+        for option_name in option_details:
+            if option_details[option_name].empty:
+                option_details[option_name] = get_historical_for_option(str(dct_symtkns[option_name]), option_name)
+            df_ticks = option_details[option_name]
+            r = RenkoWS(
+                df_ticks['timestamp'].iat[0],
+                df_ticks['close'].iat[0],
+                brick_size=SETG[SYMBOL]['brick']
+            )
 
-        df_ticks.loc[len(df_ticks)] = {
-            "timestamp": dt.now().timestamp(),
-            "Symbol": SYMBOL,
-            "close": ulying
-        }
-        r.add_prices(
-            df_ticks['timestamp'].iat[(0 + ival)],
-            df_ticks['close'].iat[(0 + ival)]
-        )
-        df_normal = r.renko_animate('normal')
-        # df_normal.to_csv(f"df_normal_{ival}.csv")
-        for key, candle in df_normal.iterrows():
-            st_dir, st = ST.update(candle)
-            # add the st value to respective row
-            # in the dataframe
-            df_normal.loc[key, 'st'] = st
-            df_normal.loc[key, 'st_dir'] = st_dir
-            val = (candle["high"] + candle["low"] + candle["close"]) / 3
-            df_normal.loc[key, 'ema'] = EMA_.update(val)
-        
-        # get direction and split colors of supertrend
-        df_normal, new_pos = split_colors(df_normal)
-        try:
-            df_normal.to_csv("banknifty_v2_df_normal.csv")
-        except:
-            pass
-        
-        # update positions if they are available
-        if any(new_pos):
-            logging.debug(f"found {new_pos=}")
-            D_POS.update(new_pos)
-        else:
-            logging.debug("NO NEW POSITION YET")
-        # update last_price and urmtom
-        if len(D_POS["symbol"]) > 5:
-            token = dct_symtkns[D_POS["symbol"]]
-            last_price = get_ltp(O_API, token)
-            pnl = float(last_price) - float(D_POS['entry_price'])
-            urmtom = int(D_POS["quantity"]) * pnl
-            updates = {
-                "last_price": last_price,
-                "urmtom": urmtom
+            if (0 + ival) >= len(df_ticks):
+                continue
+
+            ulying = get_ltp(O_API, str(dct_symtkns[option_name]))
+            if ulying == 0:
+                return
+
+            df_ticks.loc[len(df_ticks)] = {
+                "timestamp": dt.now().timestamp(),
+                "Symbol": option_name,
+                "close": ulying
             }
-            D_POS.update(updates)
-        try:
-            pd.DataFrame(D_POS, index=[0]).to_csv("banknifty_v2.csv")
-        except:
-            pass
-        print("Positions \n", pd.DataFrame(D_POS, index=[0]))
+            option_details[option_name] = df_ticks 
+            r.add_prices(
+                df_ticks['timestamp'].iat[(0 + ival)],
+                df_ticks['close'].iat[(0 + ival)]
+            )
+            df_normal = r.renko_animate('normal')
+            # df_normal.to_csv(f"df_normal_{ival}.csv")
+            for key, candle in df_normal.iterrows():
+                st_dir, st = ST.update(candle)
+                # add the st value to respective row
+                # in the dataframe
+                df_normal.loc[key, 'st'] = st
+                df_normal.loc[key, 'st_dir'] = st_dir
+                val = (candle["high"] + candle["low"] + candle["close"]) / 3
+                df_normal.loc[key, 'ema'] = EMA_.update(val)
+            
+            # get direction and split colors of supertrend
+            df_normal, new_pos = split_colors(df_normal, option_name)
+            try:
+                df_normal.to_csv("banknifty_v2_df_normal.csv")
+            except:
+                pass
+            
+            # update positions if they are available
+            if any(new_pos):
+                logger.debug(f"found {new_pos=}")
+                D_POS.update(new_pos)
+            else:
+                logger.debug("NO NEW POSITION YET")
+            # update last_price and urmtom
+            if len(D_POS["symbol"]) > 5:
+                token = dct_symtkns[D_POS["symbol"]]
+                last_price = get_ltp(O_API, token)
+                pnl = float(last_price) - float(D_POS['entry_price'])
+                urmtom = int(D_POS["quantity"]) * pnl
+                updates = {
+                    "last_price": last_price,
+                    "urmtom": urmtom
+                }
+                D_POS.update(updates)
+            try:
+                pd.DataFrame(D_POS, index=[0]).to_csv("banknifty_v2.csv")
+            except:
+                pass
+            print("Positions \n", pd.DataFrame(D_POS, index=[0]))
         ival += 1
-    try:
-        downloader.main()
-    except Exception as e:
-        print(e)
+
     SystemExit()
     
 
