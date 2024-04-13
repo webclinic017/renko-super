@@ -213,6 +213,7 @@ def split_colors(st: pd.DataFrame, option_name: str):
                         new_pos = place_api_order(dets, option_name, "BUY")
                         G_MODE_TRADE = True
                     print("Signals \n", dets)
+                    return st, new_pos
             else:
                 # SELL CONDITION CHECK
                 if (
@@ -224,6 +225,7 @@ def split_colors(st: pd.DataFrame, option_name: str):
                         new_pos = place_api_order(dets, option_name, "SELL")
                         G_MODE_TRADE = False
                 print("Signals \n", dets)
+                return st, new_pos
             print("Data \n", st.tail(2))
         print(f"Ready to take Trade ? {G_MODE_TRADE}")
     except Exception as e:
