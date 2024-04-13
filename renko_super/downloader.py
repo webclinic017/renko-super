@@ -5,7 +5,7 @@ from constants import DATA, UTIL, SETG
 
 
 def get_symbols():
-    ignore_keys_in_settings = ["finvasia", "supertrend", "ema"]
+    ignore_keys_in_settings = ["finvasia", "supertrend", "sma"]
     keys_in_settings = list(SETG.keys())
     symbol_keys = [
         key for key in keys_in_settings if key not in ignore_keys_in_settings]

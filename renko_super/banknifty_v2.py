@@ -1,10 +1,8 @@
-from constants import BRKR, DATA, FUTL, SETG, SUPR, UTIL, EMA_SETG
+from constants import BRKR, DATA, FUTL, SETG, SUPR, UTIL, SMA_SETG
 from symbols import Symbols
 from omspy_brokers.finvasia import Finvasia
 from renkodf import RenkoWS
 import streaming_indicators as si
-# import mplfinance as mpf
-# from matplotlib import animation
 from datetime import datetime as dt
 import pandas as pd
 import numpy as np
@@ -12,7 +10,6 @@ import traceback
 from rich import print
 import sys
 import pendulum
-import downloader
 from logzero import logger, logfile
 
 logfile("./renko_super.log")
@@ -34,10 +31,6 @@ F_POS = DATA + "/position.json"
 F_SIGN = DATA + "/signals.csv"
 G_MODE_TRADE = False
 MAGIC = 15
-# F_ANIM = DATA + "/ani.apng"
-
-# if os.path.exists(F_ANIM):
-#     os.remove(F_ANIM)
 
 
 def is_time_reached(time_in_config):
@@ -49,19 +42,6 @@ def is_time_reached(time_in_config):
         hour=int(entry_time[0]), minute=int(entry_time[1]), second=0, microsecond=0
     )
     return False if current_time < target_time else True
-
-
-def call_or_put_pos() -> str:
-    pos = ""
-    try:
-        length = len(SYMBOL) + 7
-        if len(D_POS['symbol']) > length:
-            pos = D_POS['symbol'][length]
-    except Exception as e:
-        logger.debug(f"{e} while getting option type")
-    finally:
-        logger.debug(f"{D_POS['symbol']} call_or_put_pos: {pos}")
-        return pos
 
 
 def strip_positions(symbol):
@@ -83,23 +63,11 @@ def strip_positions(symbol):
     return position
 
 
-def _cls_pos_get_qty():
-    qty_fm_stg = SETG[SYMBOL]['quantity']
+def _exit_and_write():
     try:
         dct = strip_positions(D_POS["symbol"])
         # if the position is found calculate pnl
         if any(dct):
-            entry_price = float(D_POS["entry_price"])
-            last_price = float(D_POS["last_price"])
-            # checking if the entry price is factory set
-            if (
-                (entry_price > 0) and
-                (last_price > entry_price)
-            ):
-                # mutliply lot if profitable
-                qty_fm_stg = 1 * SETG[SYMBOL]['quantity']
-
-            # either way close the position
             args = dict(
                 symbol=dct["symbol"],
                 quantity=dct['quantity'],
@@ -113,13 +81,23 @@ def _cls_pos_get_qty():
             resp = O_API.order_place(**args)
             logger.debug(f"{resp=} while closing positions {args=}")
     except Exception as e:
-        logger.error(f"{e} while closing position .. {qty_fm_stg=}")
+        logger.error(f"{e} while closing position ..")
         print(traceback.format_exc())
-    finally:
-        return qty_fm_stg
+    else:
+        return dict(
+            symbol="",
+            quantity=0,
+            entry_price=0,
+            last_price=0,
+            urmtom=0,
+            rpnl=0,
+        )
+    return D_POS
+
 
 
 def _write_signal_to_file(dets):
+
     headers = dets.columns.tolist()
     if FUTL.is_file_exists(F_SIGN):
         dets.to_csv(F_SIGN, mode="a",
@@ -155,11 +133,14 @@ def _enter_and_write(symbol: str, quantity: int):
         return position
 
 
-def do(dets, opt: str):
-    new_pos = _enter_and_write(
-        opt,
-        _cls_pos_get_qty()
-    )
+def place_api_order(dets, opt: str, action: str):
+    if action == "BUY":
+        new_pos = _enter_and_write(
+            opt,
+            SETG[SYMBOL]['quantity']
+        )
+    else:
+        new_pos = _exit_and_write()
     dets["tx"] = opt[-6]  
     _write_signal_to_file(dets)
     return new_pos
@@ -213,33 +194,35 @@ def split_colors(st: pd.DataFrame, option_name: str):
             # we are not live yet
             if not G_MODE_TRADE:
                 if st.iloc[-1]['volume'] > MAGIC:
-                    dets.drop(columns=["high", "low",
-                      "up", "dn", "st_dir"], inplace=True)
-                    G_MODE_TRADE = True
-                    if st.iloc[-1]['st_dir'] == 1 and \
-                            call_or_put_pos() != "C":
-                        new_pos = do(dets, option_name)
-                    elif st.iloc[-1]['st_dir'] == -1 and \
-                            call_or_put_pos() != "P":
-                        new_pos = do(dets, option_name)
-            else:
-                if (
-                    dets.iloc[-2]["open"] < dets.iloc[-2]["ema"] and
-                        call_or_put_pos() != "C" and ## why are we doing this??
-                        dets.iloc[-1]["close"] > dets.iloc[-2]["ema"]
-                ):
-                    dets.drop(columns=["high", "low",
-                      "up", "dn", "st_dir"], inplace=True)
-                    new_pos = do(dets, option_name)
-                elif (
-                    dets.iloc[-2]["open"] < dets.iloc[-2]["close"] and
-                    dets.iloc[-2]["close"] > dets.iloc[-2]["ema"] and
-                    call_or_put_pos() != "P" and ## why are we doing this??
+                    # BUY CONDITION CHECK
+                    if (
+                        dets.iloc[-2]["open"] < dets.iloc[-2]["sma"] and
+                        dets.iloc[-2]["close"] > dets.iloc[-2]["sma"]
+                    ):
+                        dets.drop(columns=["high", "low",
+                        "up", "dn", "st_dir"], inplace=True)
+                        new_pos = place_api_order(dets, option_name, "BUY")
+                        G_MODE_TRADE = True
+                    elif (
+                        dets.iloc[-2]["open"] < dets.iloc[-2]["close"] and
+                        dets.iloc[-2]["close"] > dets.iloc[-2]["sma"] and
                         dets.iloc[-2]["close"] > dets.iloc[-1]["st"]
-                ):
-                    dets.drop(columns=["high", "low",
-                      "up", "dn", "st_dir"], inplace=True)
-                    new_pos = do(dets, option_name)
+                    ):
+                        dets.drop(columns=["high", "low",
+                        "up", "dn", "st_dir"], inplace=True)
+                        new_pos = place_api_order(dets, option_name, "BUY")
+                        G_MODE_TRADE = True
+                    print("Signals \n", dets)
+            else:
+                # SELL CONDITION CHECK
+                if (
+                        dets.iloc[-2]["open"] > dets.iloc[-2]["close"] and
+                        dets.iloc[-2]["close"] < dets.iloc[-2]["sma"]
+                    ):
+                        dets.drop(columns=["high", "low",
+                        "up", "dn", "st_dir"], inplace=True)
+                        new_pos = place_api_order(dets, option_name, "SELL")
+                        G_MODE_TRADE = False
                 print("Signals \n", dets)
             print("Data \n", st.tail(2))
         print(f"Ready to take Trade ? {G_MODE_TRADE}")
@@ -279,7 +262,7 @@ read_positions_fm_file()
 O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
 O_API = get_api()
 ST = si.SuperTrend(SUPR['atr'], SUPR['multiplier'])
-EMA_ = si.EMA(EMA_SETG["period"])
+SMA_ = si.SMA(SMA_SETG["period"])
 
 
 
@@ -318,7 +301,7 @@ def run():
     
     
     ival = 0
-    while not is_time_reached('22:30'):
+    while not is_time_reached('15:30'):
         for option_name in option_details:
             if option_details[option_name].empty:
                 option_details[option_name] = get_historical_for_option(str(dct_symtkns[option_name]), option_name)
@@ -355,7 +338,7 @@ def run():
                 df_normal.loc[key, 'st'] = st
                 df_normal.loc[key, 'st_dir'] = st_dir
                 val = (candle["high"] + candle["low"] + candle["close"]) / 3
-                df_normal.loc[key, 'ema'] = EMA_.update(val)
+                df_normal.loc[key, 'sma'] = SMA_.update(val)
             
             # get direction and split colors of supertrend
             df_normal, new_pos = split_colors(df_normal, option_name)
