@@ -174,6 +174,8 @@ def split_colors(st: pd.DataFrame, option_name: str):
         new_pos = {}
         UP = []
         DN = []
+        col_num = []
+        init_col_num = 0
         for i in range(len(st)):
             if st['st_dir'].iloc[i] == 1:
                 UP.append(st['st'].iloc[i])
@@ -184,8 +186,11 @@ def split_colors(st: pd.DataFrame, option_name: str):
             else:
                 UP.append(np.nan)
                 DN.append(np.nan)
+                col_num.append(init_col_num)
+                init_col_num += 1
         st['up'] = UP
         st['dn'] = DN
+        st['col_num'] = col_num
 
         if len(st) > 2:
             dets = st.iloc[-3:-1].copy()
@@ -200,7 +205,7 @@ def split_colors(st: pd.DataFrame, option_name: str):
                         dets.iloc[-2]["close"] > dets.iloc[-2]["sma"]
                     ):
                         dets.drop(columns=["high", "low",
-                        "up", "dn", "st_dir"], inplace=True)
+                        "up", "dn", "st_dir", "col_num"], inplace=True)
                         new_pos = place_api_order(dets, option_name, "BUY")
                         G_MODE_TRADE = True
                     elif (
@@ -209,7 +214,7 @@ def split_colors(st: pd.DataFrame, option_name: str):
                         dets.iloc[-2]["close"] > dets.iloc[-1]["st"]
                     ):
                         dets.drop(columns=["high", "low",
-                        "up", "dn", "st_dir"], inplace=True)
+                        "up", "dn", "st_dir", "col_num"], inplace=True)
                         new_pos = place_api_order(dets, option_name, "BUY")
                         G_MODE_TRADE = True
                     print("Signals \n", dets)
