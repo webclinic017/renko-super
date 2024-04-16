@@ -323,7 +323,13 @@ def run():
                 df_ticks['close'].iat[0],
                 brick_size=SETG[SYMBOL]['brick']
             )
-
+            for key, candle in df_ticks.iterrows():
+                if key == 0:
+                    continue
+                r.add_prices(
+                    candle['timestamp'],
+                    candle['close']
+                )
             if (0 + ival) >= len(df_ticks):
                 continue
 
