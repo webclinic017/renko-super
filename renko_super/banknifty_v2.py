@@ -134,6 +134,7 @@ def _enter_and_write(symbol: str, quantity: int):
 
 
 def place_api_order(dets, opt: str, action: str):
+    logger.info(f"Into Place API Order {action} - {dets}, {opt}")
     if action == "BUY":
         new_pos = _enter_and_write(
             opt,
@@ -168,8 +169,9 @@ def get_ltp(api, symbol_token=None):
         return quote
 
 
-def split_colors(st: pd.DataFrame, option_name: str):
-    global G_MODE_TRADE
+def split_colors(st: pd.DataFrame, option_name: str, df):
+    global G_MODE_TRADE, is_live_ltp
+    is_live_ltp = False
     try:
         new_pos = {}
         UP = []
@@ -194,9 +196,11 @@ def split_colors(st: pd.DataFrame, option_name: str):
 
             # we are not live yet
             if not G_MODE_TRADE:
-                if st.iloc[-1]['volume'] > MAGIC:
+                if df.iloc[0]['historical_count'] < len(df):
+                    is_live_ltp = True
                     # BUY CONDITION CHECK
                     if (
+                        dets.iloc[-2]["sma"] is not None and
                         dets.iloc[-2]["open"] < dets.iloc[-2]["sma"] and
                         dets.iloc[-2]["close"] > dets.iloc[-2]["sma"]
                     ):
@@ -205,6 +209,7 @@ def split_colors(st: pd.DataFrame, option_name: str):
                         new_pos = place_api_order(dets, option_name, "BUY")
                         G_MODE_TRADE = True
                     elif (
+                        dets.iloc[-2]["sma"] is not None and
                         dets.iloc[-2]["open"] < dets.iloc[-2]["close"] and
                         dets.iloc[-2]["close"] > dets.iloc[-2]["sma"] and
                         dets.iloc[-2]["close"] > dets.iloc[-1]["st"]
@@ -218,6 +223,7 @@ def split_colors(st: pd.DataFrame, option_name: str):
             else:
                 # SELL CONDITION CHECK
                 if (
+                        dets.iloc[-2]["sma"] is not None and
                         dets.iloc[-2]["open"] > dets.iloc[-2]["close"] and
                         dets.iloc[-2]["close"] < dets.iloc[-2]["sma"]
                     ):
@@ -228,7 +234,7 @@ def split_colors(st: pd.DataFrame, option_name: str):
                 print("Signals \n", dets)
                 return st, new_pos
             print("Data \n", st.tail(2))
-        print(f"Ready to take Trade ? {G_MODE_TRADE}")
+        print(f"Ready to take Trade ? {is_live_ltp}")
     except Exception as e:
         logger.warning(f"{e} while splitting colors")
         traceback.print_exc()
@@ -286,6 +292,7 @@ def get_historical_for_option(tkn, option_name):
     df.rename(columns={"intc": "close", "time":"timestamp_column"}, inplace=True)
     df["close"] = df["close"].astype("float")
     df["Symbol"] = option_name
+    df["historical_count"] = len(df)
     return df
 
 def run():
@@ -331,6 +338,7 @@ def run():
             }
             option_details[option_name] = df_ticks 
             logger.info(f"Added one entry to {option_name}_df the total len now is {len(df_ticks)}")
+            logger.info(df_ticks.tail(5))
             r.add_prices(
                 df_ticks['timestamp'].iat[(0 + ival)],
                 df_ticks['close'].iat[(0 + ival)]
@@ -347,11 +355,11 @@ def run():
                 df_normal.loc[key, 'sma'] = SMA_.update(val)
             
             # get direction and split colors of supertrend
-            df_normal, new_pos = split_colors(df_normal, option_name)
-            try:
-                df_normal.to_csv("banknifty_v2_df_normal.csv")
-            except:
-                pass
+            df_normal, new_pos = split_colors(df_normal, option_name, df_ticks)
+            # try:
+            #     df_normal.to_csv("banknifty_v2_df_normal.csv")
+            # except:
+            #     pass
             
             # update positions if they are available
             if any(new_pos):
@@ -370,10 +378,10 @@ def run():
                     "urmtom": urmtom
                 }
                 D_POS.update(updates)
-            try:
-                pd.DataFrame(D_POS, index=[0]).to_csv("banknifty_v2.csv")
-            except:
-                pass
+            # try:
+            #     pd.DataFrame(D_POS, index=[0]).to_csv("banknifty_v2.csv")
+            # except:
+            #     pass
             print("Positions \n", pd.DataFrame(D_POS, index=[0]))
         ival += 1
 
