@@ -279,11 +279,13 @@ def get_historical_for_option(tkn, option_name):
     if not resp:
         logger.error(f"Historical data is not available for {option_name}. Exiting")
         sys.exit()
+    logger.info(f"Checking historical data for {option_name}")
     df = pd.DataFrame(resp).iloc[:100].iloc[::-1]
     df = df[["time", "intc"]]
     df['timestamp'] = pd.to_datetime(df['time'], format='%d-%m-%Y %H:%M:%S').astype('int64')// 10**9
     df.rename(columns={"intc": "close", "time":"timestamp_column"}, inplace=True)
     df["close"] = df["close"].astype("float")
+    df["Symbol"] = option_name
     return df
 
 def run():
@@ -328,6 +330,7 @@ def run():
                 "close": ulying
             }
             option_details[option_name] = df_ticks 
+            logger.info(f"Added one entry to {option_name}_df the total len now is {len(df_ticks)}")
             r.add_prices(
                 df_ticks['timestamp'].iat[(0 + ival)],
                 df_ticks['close'].iat[(0 + ival)]
