@@ -30,6 +30,7 @@ F_HIST = DATA + "/history.csv"
 F_POS = DATA + "/position.json"
 F_SIGN = DATA + "/signals.csv"
 G_MODE_TRADE = False
+is_live_ltp = False
 MAGIC = 15
 
 
@@ -171,7 +172,6 @@ def get_ltp(api, symbol_token=None):
 
 def split_colors(st: pd.DataFrame, option_name: str, df):
     global G_MODE_TRADE, is_live_ltp
-    is_live_ltp = False
     try:
         new_pos = {}
         UP = []
