@@ -174,8 +174,6 @@ def split_colors(st: pd.DataFrame, option_name: str):
         new_pos = {}
         UP = []
         DN = []
-        col_num = []
-        init_col_num = 0
         for i in range(len(st)):
             if st['st_dir'].iloc[i] == 1:
                 UP.append(st['st'].iloc[i])
@@ -186,11 +184,9 @@ def split_colors(st: pd.DataFrame, option_name: str):
             else:
                 UP.append(np.nan)
                 DN.append(np.nan)
-                col_num.append(init_col_num)
-                init_col_num += 1
         st['up'] = UP
         st['dn'] = DN
-        st['col_num'] = col_num
+        st['col_num'] = list(range(len(st)))
 
         if len(st) > 2:
             dets = st.iloc[-3:-1].copy()
