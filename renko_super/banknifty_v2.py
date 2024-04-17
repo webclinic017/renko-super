@@ -29,7 +29,7 @@ DATA += SYMBOL
 F_HIST = DATA + "/history.csv"
 F_POS = DATA + "/position.json"
 F_SIGN = DATA + "/signals.csv"
-G_MODE_TRADE = False
+SYMBOL_PURCHASED = None
 is_live_ltp = False
 MAGIC = 15
 
@@ -145,6 +145,7 @@ def place_api_order(dets, opt: str, action: str):
         new_pos = _exit_and_write()
     dets["tx"] = opt[-6]  
     _write_signal_to_file(dets)
+    logger.info(f"new position is {new_pos}")
     return new_pos
 
 
@@ -171,7 +172,7 @@ def get_ltp(api, symbol_token=None):
 
 
 def split_colors(st: pd.DataFrame, option_name: str, df):
-    global G_MODE_TRADE, is_live_ltp
+    global SYMBOL_PURCHASED, is_live_ltp
     try:
         new_pos = {}
         UP = []
@@ -195,7 +196,7 @@ def split_colors(st: pd.DataFrame, option_name: str, df):
             dets["timestamp"] = dt.now()
 
             # we are not live yet
-            if not G_MODE_TRADE:
+            if not SYMBOL_PURCHASED:
                 if df.iloc[0]['historical_count'] < len(df):
                     is_live_ltp = True
                     # BUY CONDITION CHECK
@@ -207,7 +208,7 @@ def split_colors(st: pd.DataFrame, option_name: str, df):
                         dets.drop(columns=["high", "low",
                         "up", "dn", "st_dir", "col_num"], inplace=True)
                         new_pos = place_api_order(dets, option_name, "BUY")
-                        G_MODE_TRADE = True
+                        SYMBOL_PURCHASED = option_name
                     elif (
                         dets.iloc[-2]["sma"] is not None and
                         dets.iloc[-2]["open"] < dets.iloc[-2]["close"] and
@@ -217,10 +218,11 @@ def split_colors(st: pd.DataFrame, option_name: str, df):
                         dets.drop(columns=["high", "low",
                         "up", "dn", "st_dir", "col_num"], inplace=True)
                         new_pos = place_api_order(dets, option_name, "BUY")
-                        G_MODE_TRADE = True
+                        SYMBOL_PURCHASED = option_name
                     print("Signals \n", dets)
+                    logger.info(f"{new_pos=}")
                     return st, new_pos
-            else:
+            elif SYMBOL_PURCHASED == option_name:
                 # SELL CONDITION CHECK
                 if (
                         dets.iloc[-2]["sma"] is not None and
@@ -230,8 +232,9 @@ def split_colors(st: pd.DataFrame, option_name: str, df):
                         dets.drop(columns=["high", "low",
                         "up", "dn", "st_dir"], inplace=True)
                         new_pos = place_api_order(dets, option_name, "SELL")
-                        G_MODE_TRADE = False
+                        SYMBOL_PURCHASED = None
                 print("Signals \n", dets)
+                logger.info(f"{new_pos=}")
                 return st, new_pos
             print("Data \n", st.tail(2))
         print(f"Ready to take Trade ? {is_live_ltp}")
