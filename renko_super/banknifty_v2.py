@@ -116,6 +116,8 @@ def split_colors(st: pd.DataFrame, option_name: str, df):
                     # BUY CONDITION CHECK
                     if (
                         dets.iloc[-2]["sma"] is not None
+                        and dets.iloc[-2]["up"].notna()
+                        and dets.iloc[-2]["up"] > 0
                         and dets.iloc[-2]["open"] < dets.iloc[-2]["sma"]
                         and dets.iloc[-2]["close"] > dets.iloc[-2]["sma"]
                     ):
@@ -127,9 +129,10 @@ def split_colors(st: pd.DataFrame, option_name: str, df):
                         SYMBOL_PURCHASED = option_name
                     elif (
                         dets.iloc[-2]["sma"] is not None
+                        and dets.iloc[-2]["up"].notna()
                         and dets.iloc[-2]["open"] < dets.iloc[-2]["close"]
                         and dets.iloc[-2]["close"] > dets.iloc[-2]["sma"]
-                        and dets.iloc[-2]["close"] > dets.iloc[-1]["st"]
+                        and dets.iloc[-2]["close"] > dets.iloc[-2]["up"]
                     ):
                         dets.drop(
                             columns=["high", "low", "up", "dn", "st_dir", "col_num"],
