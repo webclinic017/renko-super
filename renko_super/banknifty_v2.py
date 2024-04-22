@@ -116,26 +116,28 @@ def split_colors(st: pd.DataFrame, option_name: str, df):
                     # BUY CONDITION CHECK
                     if (
                         dets.iloc[-2]["sma"] is not None
-                        and dets.iloc[-2]["up"].notna()
+                        and dets.iloc[-2]["up"] is not None
                         and dets.iloc[-2]["up"] > 0
                         and dets.iloc[-2]["open"] < dets.iloc[-2]["sma"]
                         and dets.iloc[-2]["close"] > dets.iloc[-2]["sma"]
                     ):
                         dets.drop(
-                            columns=["high", "low", "up", "dn", "st_dir", "col_num"],
+                            columns=["high", "low", "up",
+                                     "dn", "st_dir", "col_num"],
                             inplace=True,
                         )
                         new_pos = place_api_order(dets, option_name, "BUY")
                         SYMBOL_PURCHASED = option_name
                     elif (
                         dets.iloc[-2]["sma"] is not None
-                        and dets.iloc[-2]["up"].notna()
+                        and dets.iloc[-2]["up"] is not None
                         and dets.iloc[-2]["open"] < dets.iloc[-2]["close"]
                         and dets.iloc[-2]["close"] > dets.iloc[-2]["sma"]
                         and dets.iloc[-2]["close"] > dets.iloc[-2]["up"]
                     ):
                         dets.drop(
-                            columns=["high", "low", "up", "dn", "st_dir", "col_num"],
+                            columns=["high", "low", "up",
+                                     "dn", "st_dir", "col_num"],
                             inplace=True,
                         )
                         new_pos = place_api_order(dets, option_name, "BUY")
@@ -181,15 +183,18 @@ def get_historical_for_option(tkn, option_name):
         "NFO", tkn, fromBusDay.timestamp(), lastBusDay.timestamp(), 15
     )
     if not resp:
-        logger.error(f"Historical data is not available for {option_name}. Exiting")
+        logger.error(
+            f"Historical data is not available for {option_name}. Exiting")
         sys.exit()
     logger.info(f"Checking historical data for {option_name}")
     df = pd.DataFrame(resp).iloc[:100].iloc[::-1]
     df = df[["time", "intc"]]
     df["timestamp"] = (
-        pd.to_datetime(df["time"], format="%d-%m-%Y %H:%M:%S").astype("int64") // 10**9
+        pd.to_datetime(
+            df["time"], format="%d-%m-%Y %H:%M:%S").astype("int64") // 10**9
     )
-    df.rename(columns={"intc": "close", "time": "timestamp_column"}, inplace=True)
+    df.rename(columns={"intc": "close",
+              "time": "timestamp_column"}, inplace=True)
     df["close"] = df["close"].astype("float")
     df["Symbol"] = option_name
     df["historical_count"] = len(df)
@@ -233,7 +238,8 @@ def run(dct_symtkns, option_details):
             )
             logger.info(df_ticks.tail(5))
             r.add_prices(
-                df_ticks["timestamp"].iat[(0 + ival)], df_ticks["close"].iat[(0 + ival)]
+                df_ticks["timestamp"].iat[(
+                    0 + ival)], df_ticks["close"].iat[(0 + ival)]
             )
             df_normal = r.renko_animate("normal")
             # df_normal.to_csv(f"df_normal_{ival}.csv")
