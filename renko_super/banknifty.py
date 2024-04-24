@@ -10,6 +10,7 @@ import numpy as np
 import traceback
 import os
 import pendulum
+
 import downloader
 from login import get_api
 
@@ -167,12 +168,13 @@ def get_ltp(api, symbol_token=None):
             symbol_token = SETG[SYMBOL]["key"].split("|")[1]
         resp = api.finvasia.get_quotes(exchange, symbol_token)
         if resp is None:
-            raise Exception("No response")
+            raise Exception(f"No response for {symbol_token=} and {exchange=}")
         else:
             quote = int(float(resp["lp"]))
     except Exception as e:
-        logging.warning(f"{e} while getting ltp for {symbol_token=}")
-        print(traceback.format_exc())
+        logging.warning(
+            f"{e} while getting ltp for {symbol_token=} {exchange=}")
+        traceback.print_exc()
     finally:
         return quote
 
@@ -199,7 +201,8 @@ def split_colors(st: pd.DataFrame):
         if len(st) > 1:
             dets = st.iloc[-2:-1].copy()
             dets["timestamp"] = dt.now()
-            dets.drop(columns=["high", "low", "up", "dn", "st_dir"], inplace=True)
+            dets.drop(columns=["high", "low", "up",
+                      "dn", "st_dir"], inplace=True)
 
             # we are not live yet
             if not G_MODE_TRADE:
@@ -250,10 +253,10 @@ D_POS = dict(
 )
 read_positions_fm_file()
 O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
-O_API = get_api(BRKR, LIVE=True)
+O_API = get_api(BRKR, LIVE=False)
 
 
-def run(suppress_video=False):
+def run(suppress_video):
     def animate(ival):
         if (0 + ival) >= len(df_ticks):
             logging.error("no more data to plot")
@@ -271,7 +274,8 @@ def run(suppress_video=False):
             "close": ulying,
         }
         r.add_prices(
-            df_ticks["timestamp"].iat[(0 + ival)], df_ticks["close"].iat[(0 + ival)]
+            df_ticks["timestamp"].iat[(
+                0 + ival)], df_ticks["close"].iat[(0 + ival)]
         )
         df_normal = r.renko_animate("normal", max_len=MAGIC, keep=MAGIC - 1)
         for key, candle in df_normal.iterrows():
@@ -325,9 +329,6 @@ def run(suppress_video=False):
             df_normal, type="candle", addplot=ic, ax=ax1, volume=ax2, axtitle=SYMBOL
         )
 
-    """
-        begins to run here
-    """
     O_SYM.get_exchange_token_map_finvasia()
     dct_symtkns = O_SYM.get_all_tokens_from_csv()
     df_ticks = pd.read_csv(F_HIST)
@@ -349,7 +350,8 @@ def run(suppress_video=False):
     )
     ax1 = axes[0]
     ax2 = axes[2]
-    mpf.plot(initial_df, type="candle", ax=ax1, volume=ax2, axtitle="renko: normal")
+    mpf.plot(initial_df, type="candle", ax=ax1,
+             volume=ax2, axtitle="renko: normal")
     # init super trend streaming indicator
     ST = si.SuperTrend(SUPR["atr"], SUPR["multiplier"])
     ani = animation.FuncAnimation(fig, animate, interval=80)
@@ -370,4 +372,4 @@ def run(suppress_video=False):
 
 if __name__ == "__main__":
     host = __import__("socket").gethostname()
-    run("server1" in host)
+    run("desktop" not in host)

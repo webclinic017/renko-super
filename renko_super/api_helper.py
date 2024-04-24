@@ -1,6 +1,5 @@
 import pendulum as pdlm
 import traceback
-from rich import print
 from constants import UTIL
 from typing import List, Dict
 
@@ -63,7 +62,6 @@ class ApiHelper:
 
 if __name__ == "__main__":
     import pandas as pd
-    from symbols import dct_sym
 
     """
     ul = dict(
