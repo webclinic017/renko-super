@@ -10,7 +10,7 @@ import numpy as np
 import traceback
 import os
 import pendulum
-
+import copy
 import downloader
 from login import get_api
 
@@ -81,7 +81,8 @@ def strip_positions(symbol):
 
 
 def _cls_pos_get_qty():
-    qty_fm_stg = SETG[SYMBOL]["quantity"]
+    dct = copy.deepcopy(SETG[SYMBOL])
+    qty_fm_stg = dct.pop("quantity")
     try:
         dct = strip_positions(D_POS["symbol"])
         # if the position is found calculate pnl
@@ -91,7 +92,7 @@ def _cls_pos_get_qty():
             # checking if the entry price is factory set
             if (entry_price > 0) and (last_price > entry_price):
                 # mutliply lot if profitable
-                qty_fm_stg = 1 * SETG[SYMBOL]["quantity"]
+                qty_fm_stg = 2 * SETG[SYMBOL]["quantity"]
 
             # either way close the position
             args = dict(
@@ -253,7 +254,7 @@ D_POS = dict(
 )
 read_positions_fm_file()
 O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
-O_API = get_api(BRKR, LIVE=False)
+O_API = get_api(BRKR, LIVE=True)
 
 
 def run(suppress_video):

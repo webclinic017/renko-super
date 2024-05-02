@@ -14,24 +14,24 @@ def orders():
     ord = []
     ord = brkr.orders
     if any(ord):
+        print(ord)
         for d in ord:
             if "remarks" not in d:
-                d["remarks"] = 'no tag'
-    keys = [
-        "order_id",
-        "broker_timestamp",
-        "symbol",
-        "side",
-        "average_price",
-        "status",
-        "filled_quantity",
-        "remarks"
-    ]
-    if any(ord):
+                d["remarks"] = "no tag"
+        keys = [
+            "order_id",
+            "broker_timestamp",
+            "symbol",
+            "side",
+            "average_price",
+            "status",
+            "filled_quantity",
+            "remarks",
+        ]
         ord = [{k: d[k] for k in keys} for d in ord]
-    df = pd.DataFrame(ord)
-    print(pd.DataFrame(ord))
-    df.to_csv(f"{DATA}orders.csv", index=False)
+        df = pd.DataFrame(ord)
+        print(pd.DataFrame(ord))
+        df.to_csv(f"{DATA}orders.csv", index=False)
 
 
 def positions(search=None):
@@ -49,7 +49,7 @@ def positions(search=None):
         positions = [{key: dct[key] for key in keys} for dct in positions]
         if search:
             positions = [
-                dct for dct in positions if dct['symbol'].beginswith(search)]
+                dct for dct in positions if dct["symbol"].beginswith(search)]
     print(pd.DataFrame(positions))
 
 
