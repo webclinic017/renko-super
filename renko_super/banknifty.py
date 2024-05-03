@@ -14,6 +14,7 @@ import copy
 import downloader
 from login import get_api
 
+suppress_video = True
 
 try:
     SYMBOL = __import__("os").path.basename(__file__).split(".")[0].upper()
@@ -30,10 +31,6 @@ F_POS = DATA + "/position.json"
 F_SIGN = DATA + "/signals.csv"
 G_MODE_TRADE = False
 MAGIC = 15
-F_ANIM = DATA + "/ani.apng"
-
-if os.path.exists(F_ANIM):
-    os.remove(F_ANIM)
 
 
 def is_time_reached(time_in_config):
@@ -173,8 +170,7 @@ def get_ltp(api, symbol_token=None):
         else:
             quote = int(float(resp["lp"]))
     except Exception as e:
-        logging.warning(
-            f"{e} while getting ltp for {symbol_token=} {exchange=}")
+        logging.warning(f"{e} while getting ltp for {symbol_token=} {exchange=}")
         traceback.print_exc()
     finally:
         return quote
@@ -202,8 +198,7 @@ def split_colors(st: pd.DataFrame):
         if len(st) > 1:
             dets = st.iloc[-2:-1].copy()
             dets["timestamp"] = dt.now()
-            dets.drop(columns=["high", "low", "up",
-                      "dn", "st_dir"], inplace=True)
+            dets.drop(columns=["high", "low", "up", "dn", "st_dir"], inplace=True)
 
             # we are not live yet
             if not G_MODE_TRADE:
@@ -244,30 +239,37 @@ def read_positions_fm_file():
         D_POS.update(pos)
 
 
-D_POS = dict(
-    symbol="",
-    quantity=0,
-    entry_price=0,
-    last_price=0,
-    urmtom=0,
-    rpnl=0,
-)
-read_positions_fm_file()
-O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
-O_API = get_api(BRKR, LIVE=True)
+def is_market():
+    if is_time_reached("23:30"):
+        try:
+            downloader.main()
+        except Exception as e:
+            print(e)
+        __import__("sys").exit(0)
+    return True
 
 
-def run(suppress_video):
-    def animate(ival):
-        if (0 + ival) >= len(df_ticks):
-            logging.error("no more data to plot")
-            ani.event_source.interval *= 3
-            if ani.event_source.interval > 12000:
-                exit()
-            return
+def run():
+    O_SYM.get_exchange_token_map_finvasia()
+    dct_symtkns = O_SYM.get_all_tokens_from_csv()
+    df_ticks = pd.read_csv(F_HIST)
+    r = RenkoWS(
+        df_ticks["timestamp"].iat[0],
+        df_ticks["close"].iat[0],
+        brick_size=SETG[SYMBOL]["brick"],
+    )
+    initial_df = r.initial_df
+    # init super trend streaming indicator
+    ST = si.SuperTrend(SUPR["atr"], SUPR["multiplier"])
+
+    def common_func(ival=None):
+        if not ival:
+            ival = len(df_ticks)
+
+        df_normal = pd.DataFrame()
         ulying = get_ltp(O_API)
         if ulying == 0:
-            return
+            return df_normal
 
         df_ticks.loc[len(df_ticks)] = {
             "timestamp": dt.now().timestamp(),
@@ -275,8 +277,7 @@ def run(suppress_video):
             "close": ulying,
         }
         r.add_prices(
-            df_ticks["timestamp"].iat[(
-                0 + ival)], df_ticks["close"].iat[(0 + ival)]
+            df_ticks["timestamp"].iat[(0 + ival)], df_ticks["close"].iat[(0 + ival)]
         )
         df_normal = r.renko_animate("normal", max_len=MAGIC, keep=MAGIC - 1)
         for key, candle in df_normal.iterrows():
@@ -288,8 +289,9 @@ def run(suppress_video):
         # get direction and split colors of supertrend
         df_normal, new_pos = split_colors(df_normal)
         try:
-            df_normal.to_csv("banknifty_df_normal.csv")
-        except:
+            df_normal.to_csv(DATA + "df_normal.csv")
+        except Exception as e:
+            logging.warning(f"{e} while writing to csv")
             pass
         # update positions if they are available
         if any(new_pos):
@@ -297,6 +299,7 @@ def run(suppress_video):
             D_POS.update(new_pos)
         else:
             logging.debug("NO NEW POSITION YET")
+
         # update last_price and urmtom
         if len(D_POS["symbol"]) > 5:
             token = dct_symtkns[D_POS["symbol"]]
@@ -306,10 +309,21 @@ def run(suppress_video):
             updates = {"last_price": last_price, "urmtom": urmtom}
             D_POS.update(updates)
         try:
-            pd.DataFrame(D_POS, index=[0]).to_csv("banknifty.csv")
-        except:
+            pd.DataFrame(D_POS, index=[0]).to_csv(DATA + "positions_v1.csv")
+        except Exception as e:
+            print(e)
             pass
         print("Positions \n", pd.DataFrame(D_POS, index=[0]))
+
+    def animate(ival):
+        if (0 + ival) >= len(df_ticks):
+            logging.error("no more data to plot")
+            ani.event_source.interval *= 3
+            if ani.event_source.interval > 12000:
+                exit()
+            return
+
+        df_normal = common_func(ival)
         # clear everytime
         ax1.clear()
         ax2.clear()
@@ -329,48 +343,38 @@ def run(suppress_video):
         mpf.plot(
             df_normal, type="candle", addplot=ic, ax=ax1, volume=ax2, axtitle=SYMBOL
         )
+        _ = is_market()
 
-    O_SYM.get_exchange_token_map_finvasia()
-    dct_symtkns = O_SYM.get_all_tokens_from_csv()
-    df_ticks = pd.read_csv(F_HIST)
-    r = RenkoWS(
-        df_ticks["timestamp"].iat[0],
-        df_ticks["close"].iat[0],
-        brick_size=SETG[SYMBOL]["brick"],
-    )
-    initial_df = r.initial_df
-    # init plot
-    fig, axes = mpf.plot(
-        initial_df,
-        returnfig=True,
-        volume=True,
-        figsize=(11, 8),
-        panel_ratios=(2, 1),
-        type="candle",
-        style="charles",
-    )
-    ax1 = axes[0]
-    ax2 = axes[2]
-    mpf.plot(initial_df, type="candle", ax=ax1,
-             volume=ax2, axtitle="renko: normal")
-    # init super trend streaming indicator
-    ST = si.SuperTrend(SUPR["atr"], SUPR["multiplier"])
-    ani = animation.FuncAnimation(fig, animate, interval=80)
-    try:
-        if suppress_video:
-            ani.save(F_ANIM, bitrate=1, fps=1, writer="pillow")
-        if is_time_reached("15:30"):
-            try:
-                downloader.main()
-            except Exception as e:
-                print(e)
-            SystemExit()
+    if suppress_video:
+        while is_market():
+            _ = common_func(0)
+    else:
+        # init plot
+        fig, axes = mpf.plot(
+            initial_df,
+            returnfig=True,
+            volume=True,
+            figsize=(11, 8),
+            panel_ratios=(2, 1),
+            type="candle",
+            style="charles",
+        )
+        ax1 = axes[0]
+        ax2 = axes[2]
+        mpf.plot(initial_df, type="candle", ax=ax1, volume=ax2, axtitle="renko: normal")
+        ani = animation.FuncAnimation(fig, animate, interval=80)
         mpf.show()
-    except Exception as e:
-        logging.warning(f"animation {e}")
-        pass
 
 
-if __name__ == "__main__":
-    host = __import__("socket").gethostname()
-    run("desktop" not in host)
+D_POS = dict(
+    symbol="",
+    quantity=0,
+    entry_price=0,
+    last_price=0,
+    urmtom=0,
+    rpnl=0,
+)
+read_positions_fm_file()
+O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
+O_API = get_api(BRKR, LIVE=True)
+run()
