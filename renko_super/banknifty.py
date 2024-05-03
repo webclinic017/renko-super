@@ -8,13 +8,12 @@ from datetime import datetime as dt
 import pandas as pd
 import numpy as np
 import traceback
-import os
 import pendulum
 import copy
 import downloader
 from login import get_api
 
-suppress_video = True
+suppress_video = False
 
 try:
     SYMBOL = __import__("os").path.basename(__file__).split(".")[0].upper()
@@ -249,6 +248,19 @@ def is_market():
     return True
 
 
+D_POS = dict(
+    symbol="",
+    quantity=0,
+    entry_price=0,
+    last_price=0,
+    urmtom=0,
+    rpnl=0,
+)
+read_positions_fm_file()
+O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
+O_API = get_api(BRKR, LIVE=True)
+
+
 def run():
     O_SYM.get_exchange_token_map_finvasia()
     dct_symtkns = O_SYM.get_all_tokens_from_csv()
@@ -366,15 +378,4 @@ def run():
         mpf.show()
 
 
-D_POS = dict(
-    symbol="",
-    quantity=0,
-    entry_price=0,
-    last_price=0,
-    urmtom=0,
-    rpnl=0,
-)
-read_positions_fm_file()
-O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
-O_API = get_api(BRKR, LIVE=True)
 run()
