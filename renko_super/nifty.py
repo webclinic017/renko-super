@@ -1,4 +1,5 @@
-from constants import logging, BRKR, DATA, FUTL, SETG, SUPR, UTIL
+from constants import logging, BRKR, DATA, FUTL, SETG, SUPR
+from toolkit.kokoo import is_time_past, blink
 from symbols import Symbols
 from renkodf import RenkoWS
 import streaming_indicators as si
@@ -8,39 +9,70 @@ from datetime import datetime as dt
 import pandas as pd
 import numpy as np
 import traceback
-import pendulum
 import copy
 import downloader
 from login import get_api
 
-suppress_video = False
+
+def read_positions_fm_file():
+    """
+    read overnight positions from file
+    """
+    D_POS = dict(
+        symbol="",
+        quantity=0,
+        entry_price=0,
+        last_price=0,
+        urmtom=0,
+        rpnl=0,
+    )
+    if FUTL.is_file_exists(F_POS):
+        pos = FUTL.read_file(F_POS)
+        D_POS.update(pos)
+    return D_POS
+
 
 try:
     SYMBOL = __import__("os").path.basename(__file__).split(".")[0].upper()
     EXPIRY = SETG[SYMBOL]["expiry"]
     DIFF = SETG[SYMBOL]["diff"]
+    GFX = SETG["common"]["graphics"]
+    EOD = SETG["common"]["eod"]
+    O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
+    O_API = get_api(BRKR, LIVE=True)
+    # SYSTEM CONSTANTS
+    DATA = DATA + SYMBOL + "/"
+    F_HIST = DATA + "history.csv"
+    if not FUTL.is_file_exists(F_HIST):
+        print(f"We need {F_HIST} before continuing")
+    F_POS = DATA + "position.json"
+    F_SIGN = DATA + "signals.csv"
+    D_POS = read_positions_fm_file()
 except Exception as e:
-    logging.critical(f"{e} while getting constants")
+    D_POS = dict(
+        symbol="",
+        quantity=0,
+        entry_price=0,
+        last_price=0,
+        urmtom=0,
+        rpnl=0,
+    )
+    logging.critical(f"{e} while initiating")
     print(traceback.format_exc())
     __import__("sys").exit(1)
 
-DATA += SYMBOL
-F_HIST = DATA + "/history.csv"
-F_POS = DATA + "/position.json"
-F_SIGN = DATA + "/signals.csv"
 G_MODE_TRADE = False
 MAGIC = 15
 
 
-def is_time_reached(time_in_config):
-    # check if current time is greater than time as per configuration
-    # and return True or False
-    entry_time = time_in_config.split(":")
-    current_time = pendulum.now(pendulum.timezone("Asia/Kolkata"))
-    target_time = current_time.replace(
-        hour=int(entry_time[0]), minute=int(entry_time[1]), second=0, microsecond=0
-    )
-    return False if current_time < target_time else True
+def is_market():
+    if is_time_past(EOD):
+        try:
+            downloader.main()
+        except Exception as e:
+            print(e)
+        __import__("sys").exit(0)
+    return True
 
 
 def call_or_put_pos() -> str:
@@ -154,7 +186,7 @@ def do(dets, opt: str):
 
 
 def get_ltp(api, symbol_token=None):
-    UTIL.slp_til_nxt_sec()
+    blink()
     quote = 0
     try:
         if symbol_token:
@@ -164,10 +196,7 @@ def get_ltp(api, symbol_token=None):
             exchange = SETG[SYMBOL]["key"].split("|")[0]
             symbol_token = SETG[SYMBOL]["key"].split("|")[1]
         resp = api.finvasia.get_quotes(exchange, symbol_token)
-        if resp is None:
-            raise Exception(f"No response for {symbol_token=} and {exchange=}")
-        else:
-            quote = int(float(resp["lp"]))
+        quote = float(resp["lp"])
     except Exception as e:
         logging.warning(f"{e} while getting ltp for {symbol_token=} {exchange=}")
         traceback.print_exc()
@@ -229,38 +258,6 @@ def split_colors(st: pd.DataFrame):
     return st, new_pos
 
 
-def read_positions_fm_file():
-    """
-    read overnight positions from file
-    """
-    if FUTL.is_file_exists(F_POS):
-        pos = FUTL.read_file(F_POS)
-        D_POS.update(pos)
-
-
-def is_market():
-    if is_time_reached("23:30"):
-        try:
-            downloader.main()
-        except Exception as e:
-            print(e)
-        __import__("sys").exit(0)
-    return True
-
-
-D_POS = dict(
-    symbol="",
-    quantity=0,
-    entry_price=0,
-    last_price=0,
-    urmtom=0,
-    rpnl=0,
-)
-read_positions_fm_file()
-O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
-O_API = get_api(BRKR, LIVE=True)
-
-
 def run():
     O_SYM.get_exchange_token_map_finvasia()
     dct_symtkns = O_SYM.get_all_tokens_from_csv()
@@ -275,57 +272,54 @@ def run():
     ST = si.SuperTrend(SUPR["atr"], SUPR["multiplier"])
 
     def common_func(ival=None):
-        if not ival:
-            ival = len(df_ticks)
-
         df_normal = pd.DataFrame()
-        ulying = get_ltp(O_API)
-        if ulying == 0:
-            return df_normal
-
-        df_ticks.loc[len(df_ticks)] = {
-            "timestamp": dt.now().timestamp(),
-            "Symbol": SYMBOL,
-            "close": ulying,
-        }
-        r.add_prices(
-            df_ticks["timestamp"].iat[(0 + ival)], df_ticks["close"].iat[(0 + ival)]
-        )
-        df_normal = r.renko_animate("normal", max_len=MAGIC, keep=MAGIC - 1)
-        for key, candle in df_normal.iterrows():
-            st_dir, st = ST.update(candle)
-            # add the st value to respective row
-            # in the dataframe
-            df_normal.loc[key, "st"] = st
-            df_normal.loc[key, "st_dir"] = st_dir
-        # get direction and split colors of supertrend
-        df_normal, new_pos = split_colors(df_normal)
         try:
-            df_normal.to_csv(DATA + "df_normal.csv")
-        except Exception as e:
-            logging.warning(f"{e} while writing to csv")
-            pass
-        # update positions if they are available
-        if any(new_pos):
-            logging.debug(f"found {new_pos=}")
-            D_POS.update(new_pos)
-        else:
-            logging.debug("NO NEW POSITION YET")
+            if not ival:
+                ival = len(df_ticks)
 
-        # update last_price and urmtom
-        if len(D_POS["symbol"]) > 5:
-            token = dct_symtkns[D_POS["symbol"]]
-            last_price = get_ltp(O_API, token)
-            pnl = float(last_price) - float(D_POS["entry_price"])
-            urmtom = int(D_POS["quantity"]) * pnl
-            updates = {"last_price": last_price, "urmtom": urmtom}
-            D_POS.update(updates)
-        try:
-            pd.DataFrame(D_POS, index=[0]).to_csv(DATA + "positions_v1.csv")
+            ulying = get_ltp(O_API)
+            if ulying == 0:
+                return df_normal
+
+            df_ticks.loc[len(df_ticks)] = {
+                "timestamp": dt.now().timestamp(),
+                "Symbol": SYMBOL,
+                "close": ulying,
+            }
+            r.add_prices(
+                df_ticks["timestamp"].iat[(0 + ival)], df_ticks["close"].iat[(0 + ival)]
+            )
+            df_normal = r.renko_animate("normal", max_len=MAGIC, keep=MAGIC - 1)
+            for key, candle in df_normal.iterrows():
+                st_dir, st = ST.update(candle)
+                # add the st value to respective row
+                # in the dataframe
+                df_normal.loc[key, "st"] = st
+                df_normal.loc[key, "st_dir"] = st_dir
+            # get direction and split colors of supertrend
+            df_normal, new_pos = split_colors(df_normal)
+            # df_normal.to_csv(DATA + "df_normal.csv")
+            # update positions if they are available
+            if any(new_pos):
+                logging.debug(f"found {new_pos=}")
+                D_POS.update(new_pos)
+
+            # update last_price and urmtom
+            if len(D_POS["symbol"]) > 5:
+                token = dct_symtkns[D_POS["symbol"]]
+                last_price = get_ltp(O_API, token)
+                pnl = float(last_price) - float(D_POS["entry_price"])
+                urmtom = int(D_POS["quantity"]) * pnl
+                updates = {"last_price": last_price, "urmtom": urmtom}
+                D_POS.update(updates)
+                # pd.DataFrame(D_POS, index=[0]).to_csv(DATA + "positions_v1.csv")
+                print("Positions \n", pd.DataFrame(D_POS, index=[0]))
+
         except Exception as e:
+            logging.error(f"{e} while common func")
             print(e)
-            pass
-        print("Positions \n", pd.DataFrame(D_POS, index=[0]))
+        finally:
+            return df_normal
 
     def animate(ival):
         if (0 + ival) >= len(df_ticks):
@@ -336,6 +330,9 @@ def run():
             return
 
         df_normal = common_func(ival)
+
+        if df_normal is None:
+            return
         # clear everytime
         ax1.clear()
         ax2.clear()
@@ -357,7 +354,7 @@ def run():
         )
         _ = is_market()
 
-    if suppress_video:
+    if not GFX:
         while is_market():
             _ = common_func(0)
     else:
