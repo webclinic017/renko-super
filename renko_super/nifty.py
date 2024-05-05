@@ -39,7 +39,7 @@ try:
     GFX = SETG["common"]["graphics"]
     EOD = SETG["common"]["eod"]
     O_SYM = Symbols("NFO", SYMBOL, EXPIRY)
-    O_API = get_api(BRKR, LIVE=True)
+    O_API = get_api(BRKR, LIVE=SETG["common"]["live"])
     # SYSTEM CONSTANTS
     DATA = DATA + SYMBOL + "/"
     F_HIST = DATA + "history.csv"
@@ -180,6 +180,7 @@ def _enter_and_write(symbol: str, quantity: int):
 def do(dets, opt: str):
     atm = O_SYM.get_atm(dets.iloc[-1]["close"])
     itm_option = O_SYM.find_option(atm, opt, SETG[SYMBOL]["diff"])
+    logging.debug(f"{atm=} {itm_option=}")
     new_pos = _enter_and_write(itm_option, _cls_pos_get_qty())
     dets["tx"] = opt
     _write_signal_to_file(dets)
@@ -376,4 +377,5 @@ def run():
         mpf.show()
 
 
-run()
+if __name__ == "__main__":
+    run()
