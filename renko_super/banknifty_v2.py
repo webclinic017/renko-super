@@ -122,8 +122,7 @@ def split_colors(st: pd.DataFrame, option_name: str, df):
                         and dets.iloc[-2]["close"] > dets.iloc[-2]["sma"]
                     ):
                         dets.drop(
-                            columns=["high", "low", "up",
-                                     "dn", "st_dir", "col_num"],
+                            columns=["high", "low", "up", "dn", "st_dir", "col_num"],
                             inplace=True,
                         )
                         new_pos = place_api_order(dets, option_name, "BUY")
@@ -136,8 +135,7 @@ def split_colors(st: pd.DataFrame, option_name: str, df):
                         and dets.iloc[-2]["close"] > dets.iloc[-2]["up"]
                     ):
                         dets.drop(
-                            columns=["high", "low", "up",
-                                     "dn", "st_dir", "col_num"],
+                            columns=["high", "low", "up", "dn", "st_dir", "col_num"],
                             inplace=True,
                         )
                         new_pos = place_api_order(dets, option_name, "BUY")
@@ -168,7 +166,7 @@ def split_colors(st: pd.DataFrame, option_name: str, df):
     return st, new_pos
 
 
-O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
+O_SYM = Symbols("NFO", SYMBOL, EXPIRY)
 O_API = get_api(BRKR, IS_LIVE)
 ST = si.SuperTrend(SUPR["atr"], SUPR["multiplier"])
 SMA_ = si.SMA(SMA_SETG["period"])
@@ -183,18 +181,15 @@ def get_historical_for_option(tkn, option_name):
         "NFO", tkn, fromBusDay.timestamp(), lastBusDay.timestamp(), 15
     )
     if not resp:
-        logger.error(
-            f"Historical data is not available for {option_name}. Exiting")
+        logger.error(f"Historical data is not available for {option_name}. Exiting")
         sys.exit()
     logger.info(f"Checking historical data for {option_name}")
     df = pd.DataFrame(resp).iloc[:100].iloc[::-1]
     df = df[["time", "intc"]]
     df["timestamp"] = (
-        pd.to_datetime(
-            df["time"], format="%d-%m-%Y %H:%M:%S").astype("int64") // 10**9
+        pd.to_datetime(df["time"], format="%d-%m-%Y %H:%M:%S").astype("int64") // 10**9
     )
-    df.rename(columns={"intc": "close",
-              "time": "timestamp_column"}, inplace=True)
+    df.rename(columns={"intc": "close", "time": "timestamp_column"}, inplace=True)
     df["close"] = df["close"].astype("float")
     df["Symbol"] = option_name
     df["historical_count"] = len(df)
@@ -238,8 +233,7 @@ def run(dct_symtkns, option_details):
             )
             logger.info(df_ticks.tail(5))
             r.add_prices(
-                df_ticks["timestamp"].iat[(
-                    0 + ival)], df_ticks["close"].iat[(0 + ival)]
+                df_ticks["timestamp"].iat[(0 + ival)], df_ticks["close"].iat[(0 + ival)]
             )
             df_normal = r.renko_animate("normal")
             # df_normal.to_csv(f"df_normal_{ival}.csv")
@@ -274,16 +268,16 @@ def main():
     dct_symtkns = O_SYM.get_all_tokens_from_csv()
     atm = O_SYM.get_atm(get_ltp(O_API))
     ce_option, pe_option = (
-        O_SYM.find_itm_option(atm, "C"),
-        O_SYM.find_itm_option(atm, "P"),
+        O_SYM.find_option(atm, "C", SETG[SYMBOL]["diff"]),
+        O_SYM.find_option(atm, "P", SETG[SYMBOL]["diff"]),
     )
     while not is_time_past("09:30:00"):
         timer(1)
         atm = O_SYM.get_atm(get_ltp(O_API))
         print("atm is:", atm, "sleeping ..")
         ce_option, pe_option = (
-            O_SYM.find_itm_option(atm, "C"),
-            O_SYM.find_itm_option(atm, "P"),
+            O_SYM.find_option(atm, "C", SETG[SYMBOL]["diff"]),
+            O_SYM.find_option(atm, "P", SETG[SYMBOL]["diff"]),
         )
     else:
         option_details = {ce_option: pd.DataFrame(), pe_option: pd.DataFrame()}

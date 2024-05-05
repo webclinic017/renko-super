@@ -14,3 +14,4 @@ pendulum
 pyaml
 requests
 websocket-client
+logzero
