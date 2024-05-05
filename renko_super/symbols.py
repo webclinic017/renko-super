@@ -71,10 +71,10 @@ class Symbols:
     """
 
     def find_option(self, atm, c_or_p, distance):
-        if c_or_p == "C":
-            return f'{self.symbol}{self.expiry}{c_or_p}{atm + (distance * dct_sym[self.symbol]["diff"])}'
-        else:
-            return f'{self.symbol}{self.expiry}{c_or_p}{atm + (distance * dct_sym[self.symbol]["diff"])}'
+        away = distance * dct_sym[self.symbol]["diff"]
+        if c_or_p == "P":
+            away = -1 * away
+        return f"{self.symbol}{self.expiry}{c_or_p}{atm + away}"
 
     def get_all_tokens_from_csv(self):
         df = pd.read_csv(self.csvfile)
@@ -87,12 +87,13 @@ if __name__ == "__main__":
 
     SYMBOL = "BANKNIFTY"
     try:
-        symbols = Symbols("NFO", SYMBOL, SETG[SYMBOL]["expiry"], SETG[SYMBOL]["diff"])
+        symbols = Symbols("NFO", SYMBOL, SETG[SYMBOL]["expiry"])
         symbols.get_exchange_token_map_finvasia()
         dct = symbols.get_all_tokens_from_csv()
         print(dct["BANKNIFTY08MAY24C48000"])
 
         atm = symbols.get_atm(48000.50)
-        symbols.find_itm_option(atm, "C")
+        resp = symbols.find_option(atm, "P", -2)
+        print(f"{resp=}")
     except Exception as e:
         logging.debug(f"{e} while getting symbols")
