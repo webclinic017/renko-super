@@ -5,10 +5,11 @@ import traceback
 
 def get_api(CNFG, LIVE=False):
     try:
-        print(f"LIVE mode is {LIVE}")
         if LIVE:
+            print("LIVE mode is ON")
             api = Finvasia(**CNFG)
         else:
+            print("PAPER trading")
             api = Paper(**CNFG)
 
         if not api.authenticate():

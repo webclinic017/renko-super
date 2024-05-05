@@ -1,5 +1,5 @@
 from constants import logging, BRKR, DATA, FUTL, SETG, SUPR
-from toolkit.kokoo import is_time_past, blink
+from toolkit.kokoo import is_time_past, blink, timer
 from symbols import Symbols
 from renkodf import RenkoWS
 import streaming_indicators as si
@@ -38,7 +38,7 @@ try:
     DIFF = SETG[SYMBOL]["diff"]
     GFX = SETG["common"]["graphics"]
     EOD = SETG["common"]["eod"]
-    O_SYM = Symbols("NFO", SYMBOL, EXPIRY, DIFF)
+    O_SYM = Symbols("NFO", SYMBOL, EXPIRY)
     O_API = get_api(BRKR, LIVE=True)
     # SYSTEM CONSTANTS
     DATA = DATA + SYMBOL + "/"
@@ -66,6 +66,7 @@ MAGIC = 15
 
 
 def is_market():
+    timer(1)
     if is_time_past(EOD):
         try:
             downloader.main()
@@ -178,7 +179,7 @@ def _enter_and_write(symbol: str, quantity: int):
 
 def do(dets, opt: str):
     atm = O_SYM.get_atm(dets.iloc[-1]["close"])
-    itm_option = O_SYM.find_itm_option(atm, opt)
+    itm_option = O_SYM.find_option(atm, opt, SETG[SYMBOL]["diff"])
     new_pos = _enter_and_write(itm_option, _cls_pos_get_qty())
     dets["tx"] = opt
     _write_signal_to_file(dets)

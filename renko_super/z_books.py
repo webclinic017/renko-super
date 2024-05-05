@@ -48,10 +48,9 @@ def positions(search=None):
         # filter by dict keys
         positions = [{key: dct[key] for key in keys} for dct in positions]
         if search:
-            positions = [
-                dct for dct in positions if dct["symbol"].beginswith(search)]
+            positions = [dct for dct in positions if dct["symbol"].beginswith(search)]
     print(pd.DataFrame(positions))
 
 
-orders()
+# orders()
 positions()
